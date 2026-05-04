@@ -1,0 +1,5 @@
+[lints.clippy]
+all = "warn"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"

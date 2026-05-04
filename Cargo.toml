@@ -1,10 +1,13 @@
 [package]
 name = "cargo-kimi"
-version = "1.4.0"
+version = "1.5.0"
 edition = "2021"
 description = "Cargo subcommand for kimi-dotfiles guidelines and verification"
 license = "MIT"
 repository = "https://github.com/ekhodzitsky/kimi-dotfiles"
+readme = "README.md"
+keywords = ["cargo", "cli", "rust", "contracts", "newtype"]
+categories = ["command-line-utilities", "development-tools::cargo-plugins"]
 
 [[bin]]
 name = "cargo-kimi"
@@ -15,3 +18,5 @@ clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
 regex = "1.11"
 walkdir = "2.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

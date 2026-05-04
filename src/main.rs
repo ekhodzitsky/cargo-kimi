@@ -1,5 +1,6 @@
 mod contracts;
 mod testgen;
+mod workspace;
 
 use clap::{Parser, Subcommand};
 use std::fs;
@@ -52,14 +53,14 @@ enum Commands {
 }
 
 // Embedded AGENTS.md templates
-const AGENTS_MINIMAL: &str = include_str!("../../templates/minimal/AGENTS.md");
-const AGENTS_RUST_ONLY: &str = include_str!("../../templates/rust-only/AGENTS.md");
-const AGENTS_FULL: &str = include_str!("../../templates/full/AGENTS.md");
+const AGENTS_MINIMAL: &str = include_str!("../assets/templates/minimal/AGENTS.md");
+const AGENTS_RUST_ONLY: &str = include_str!("../assets/templates/rust-only/AGENTS.md");
+const AGENTS_FULL: &str = include_str!("../assets/templates/full/AGENTS.md");
 
 // Embedded clippy configs
-const CLIPPY_RELAXED: &str = include_str!("../../strictness/relaxed.toml");
-const CLIPPY_STANDARD: &str = include_str!("../../strictness/standard.toml");
-const CLIPPY_STRICT: &str = include_str!("../../strictness/strict.toml");
+const CLIPPY_RELAXED: &str = include_str!("../assets/strictness/relaxed.toml");
+const CLIPPY_STANDARD: &str = include_str!("../assets/strictness/standard.toml");
+const CLIPPY_STRICT: &str = include_str!("../assets/strictness/strict.toml");
 
 fn main() -> anyhow::Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
@@ -143,7 +144,7 @@ fn cmd_init(template: &str, strictness: &str, location: &str, yes: bool) -> anyh
 fn cmd_check(strictness: &str) -> anyhow::Result<()> {
     println!("=== Running contract checker (strictness: {}) ===", strictness);
     let config = contracts::CheckConfig::from_strictness(strictness)?;
-    let paths = vec![PathBuf::from("src")];
+    let paths = workspace::find_workspace_crates()?;
     let reports = contracts::check_files(&paths, &config)?;
     contracts::print_reports(&reports);
 
@@ -158,14 +159,14 @@ fn cmd_check(strictness: &str) -> anyhow::Result<()> {
 
     println!("\n=== Running cargo clippy ===");
     let status = Command::new("cargo")
-        .args(["clippy", "--", "-D", "warnings"])
+        .args(["clippy", "--workspace", "--", "-D", "warnings"])
         .status()?;
     if !status.success() {
         anyhow::bail!("❌ Clippy failed");
     }
 
     println!("\n=== Running cargo test ===");
-    let status = Command::new("cargo").args(["test"]).status()?;
+    let status = Command::new("cargo").args(["test", "--workspace"]).status()?;
     if !status.success() {
         anyhow::bail!("❌ Tests failed");
     }
