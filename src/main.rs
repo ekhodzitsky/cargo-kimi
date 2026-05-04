@@ -23,6 +23,9 @@ enum Commands {
         /// Strictness level for clippy config
         #[arg(short, long, value_name = "LEVEL", default_value = "standard")]
         strictness: String,
+        /// Where to place AGENTS.md (root or .kimi)
+        #[arg(short, long, value_name = "PATH", default_value = "auto")]
+        location: String,
         /// Skip confirmation prompts
         #[arg(short, long)]
         yes: bool,
@@ -65,22 +68,33 @@ fn main() -> anyhow::Result<()> {
         Commands::Init {
             template,
             strictness,
+            location,
             yes,
-        } => cmd_init(&template, &strictness, yes),
+        } => cmd_init(&template, &strictness, &location, yes),
         Commands::Check { strictness } => cmd_check(&strictness),
         Commands::Verify => cmd_verify(),
         Commands::Upgrade => cmd_upgrade(),
     }
 }
 
-fn cmd_init(template: &str, strictness: &str, yes: bool) -> anyhow::Result<()> {
+fn cmd_init(template: &str, strictness: &str, location: &str, yes: bool) -> anyhow::Result<()> {
     let agents = resolve_agents(template)?;
     let clippy = resolve_clippy(strictness)?;
 
-    let target_path = if Path::new(".kimi/AGENTS.md").exists() {
-        ".kimi/AGENTS.md"
-    } else {
-        "AGENTS.md"
+    let target_path = match location {
+        "auto" => {
+            if Path::new(".kimi/AGENTS.md").exists() {
+                ".kimi/AGENTS.md"
+            } else {
+                "AGENTS.md"
+            }
+        }
+        ".kimi" => {
+            fs::create_dir_all(".kimi")?;
+            ".kimi/AGENTS.md"
+        }
+        "root" => "AGENTS.md",
+        _ => anyhow::bail!("Unknown location: '{}'. Available: auto, root, .kimi", location),
     };
 
     // Confirm overwrite
@@ -108,7 +122,11 @@ fn cmd_init(template: &str, strictness: &str, yes: bool) -> anyhow::Result<()> {
         println!("⚠ No Cargo.toml found — skipping .cargo/config.toml");
     }
 
-    println!("\nNext: git add {} .cargo/config.toml && git commit -m 'Add kimi-dotfiles guidelines'", target_path);
+    if Path::new("Cargo.toml").exists() {
+        println!("\nNext: git add {} .cargo/config.toml && git commit -m 'Add kimi-dotfiles guidelines'", target_path);
+    } else {
+        println!("\nNext: git add {} && git commit -m 'Add kimi-dotfiles guidelines'", target_path);
+    }
     Ok(())
 }
 
