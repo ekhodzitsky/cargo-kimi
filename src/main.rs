@@ -1,7 +1,10 @@
+mod contracts;
+mod testgen;
+
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Cargo subcommand for kimi-dotfiles — structured contracts for Rust
@@ -38,6 +41,12 @@ enum Commands {
     },
     /// Run formal verification with Kani (if installed)
     Verify,
+    /// Generate property tests for newtypes with arithmetic impls
+    GenerateTests {
+        /// Output file path (default: tests/property_tests.rs)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
     /// Show upgrade instructions
     Upgrade,
 }
@@ -73,6 +82,7 @@ fn main() -> anyhow::Result<()> {
         } => cmd_init(&template, &strictness, &location, yes),
         Commands::Check { strictness } => cmd_check(&strictness),
         Commands::Verify => cmd_verify(),
+        Commands::GenerateTests { output } => cmd_generate_tests(output.as_deref()),
         Commands::Upgrade => cmd_upgrade(),
     }
 }
@@ -132,15 +142,18 @@ fn cmd_init(template: &str, strictness: &str, location: &str, yes: bool) -> anyh
 
 fn cmd_check(strictness: &str) -> anyhow::Result<()> {
     println!("=== Running contract checker (strictness: {}) ===", strictness);
-    if Path::new("scripts/check-contracts.py").exists() {
-        let status = Command::new("python3")
-            .args(["scripts/check-contracts.py", "src/", "--strictness", strictness])
-            .status()?;
-        if !status.success() {
-            anyhow::bail!("❌ Contract check failed");
-        }
-    } else {
-        println!("⚠ scripts/check-contracts.py not found — skipping contract check");
+    let config = contracts::CheckConfig::from_strictness(strictness)?;
+    let paths = vec![PathBuf::from("src")];
+    let reports = contracts::check_files(&paths, &config)?;
+    contracts::print_reports(&reports);
+
+    let has_critical = reports.iter().any(|r| {
+        r.issues
+            .iter()
+            .any(|i| i.severity == contracts::Severity::Critical)
+    });
+    if has_critical {
+        anyhow::bail!("❌ Contract check failed: critical issues found");
     }
 
     println!("\n=== Running cargo clippy ===");
@@ -183,6 +196,12 @@ fn cmd_verify() -> anyhow::Result<()> {
 
     println!("\n✅ Kani verification passed");
     Ok(())
+}
+
+fn cmd_generate_tests(output: Option<&str>) -> anyhow::Result<()> {
+    let src = Path::new("src");
+    let out = output.map(Path::new);
+    testgen::write_tests(src, out)
 }
 
 fn cmd_upgrade() -> anyhow::Result<()> {
