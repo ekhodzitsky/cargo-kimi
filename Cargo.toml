@@ -1,0 +1,15 @@
+[package]
+name = "cargo-kimi"
+version = "1.3.0"
+edition = "2021"
+description = "Cargo subcommand for kimi-dotfiles guidelines and verification"
+license = "MIT"
+repository = "https://github.com/ekhodzitsky/kimi-dotfiles"
+
+[[bin]]
+name = "cargo-kimi"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
