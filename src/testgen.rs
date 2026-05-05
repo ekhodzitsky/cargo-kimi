@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::LazyLock;
 
-static STRUCT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*pub\s+struct\s+(\w+)\s*\(\s*(\w+)\s*\)").unwrap());
+static STRUCT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*pub\s+struct\s+(\w+)\s*\(\s*(?:pub\s+)?(\w+)\s*\)").unwrap());
 static IMPL_ADD_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"impl\s+(std::ops::)?Add\s+(for\s+)?(\w+)").unwrap());
 static IMPL_SUB_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"impl\s+(std::ops::)?Sub\s+(for\s+)?(\w+)").unwrap());
 static IMPL_MUL_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"impl\s+(std::ops::)?Mul\s+(for\s+)?(\w+)").unwrap());
@@ -251,7 +251,7 @@ pub fn generate_tests(test_cases: &[TestCase]) -> String {
                         "        fn {type_name_snake}_{op_str}_associativity(a in any::<{inner}>().prop_map({type_name}), b in any::<{inner}>().prop_map({type_name}), c in any::<{inner}>().prop_map({type_name})) {{\n"
                     ));
                     output.push_str(&format!(
-                        "            prop_assert_eq!(a.{wrap}(b.{wrap}(c)), (a.{wrap}(b)).{wrap}(c));\n"
+                        "            prop_assert_eq!({type_name}(a.0.{wrap}(b.0.{wrap}(c.0))), {type_name}((a.0.{wrap}(b.0)).{wrap}(c.0)));\n"
                     ));
                     output.push_str("        }\n");
                     output.push_str("    }\n\n");
@@ -264,7 +264,7 @@ pub fn generate_tests(test_cases: &[TestCase]) -> String {
                         "        fn {type_name_snake}_{op_str}_commutativity(a in any::<{inner}>().prop_map({type_name}), b in any::<{inner}>().prop_map({type_name})) {{\n"
                     ));
                     output.push_str(&format!(
-                        "            prop_assert_eq!(a.{wrap}(b), b.{wrap}(a));\n"
+                        "            prop_assert_eq!({type_name}(a.0.{wrap}(b.0)), {type_name}(b.0.{wrap}(a.0)));\n"
                     ));
                     output.push_str("        }\n");
                     output.push_str("    }\n\n");
@@ -277,7 +277,7 @@ pub fn generate_tests(test_cases: &[TestCase]) -> String {
                     "        fn {type_name_snake}_{op_str}_identity(a in any::<{inner}>().prop_map({type_name})) {{\n"
                 ));
                 output.push_str(&format!(
-                    "            prop_assert_eq!(a.{wrap}({type_name}{identity}), a);\n"
+                    "            prop_assert_eq!({type_name}(a.0.{wrap}({identity})), a);\n"
                 ));
                 output.push_str("        }\n");
                 output.push_str("    }\n\n");
@@ -466,6 +466,39 @@ mod tests {
         assert_eq!(Op::Add.wrapping_method(), "wrapping_add");
         assert_eq!(Op::Sub.wrapping_method(), "wrapping_sub");
         assert_eq!(Op::Mul.wrapping_method(), "wrapping_mul");
+    }
+
+    #[test]
+    fn struct_re_matches_pub_inner_field() {
+        // TG-1: pub struct Foo(pub u32) must be detected
+        let cap = STRUCT_RE.captures("pub struct Foo(pub u32)").unwrap();
+        assert_eq!(&cap[1], "Foo");
+        assert_eq!(&cap[2], "u32");
+    }
+
+    #[test]
+    fn struct_re_matches_private_inner_field() {
+        let cap = STRUCT_RE.captures("pub struct Bar(i64)").unwrap();
+        assert_eq!(&cap[1], "Bar");
+        assert_eq!(&cap[2], "i64");
+    }
+
+    #[test]
+    fn generate_integral_wrapping_uses_inner_field() {
+        // TG-2: wrapping methods must be called on .0 (inner value), not the wrapper
+        let cases = vec![TestCase {
+            type_name: "Meters".to_string(),
+            inner_type: "u32".to_string(),
+            traits: Traits {
+                ops: vec![Op::Add],
+                has_ord: false,
+                has_eq: true,
+                has_clone: false,
+            },
+        }];
+        let output = generate_tests(&cases);
+        assert!(output.contains("a.0.wrapping_add"), "should call wrapping_add on .0, got:\n{output}");
+        assert!(output.contains("Meters(a.0.wrapping_add"), "should re-wrap result in type constructor");
     }
 }
 #[allow(dead_code)]

@@ -12,6 +12,7 @@ use std::sync::LazyLock;
 static HOARE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*///\s*\{").unwrap());
 static PUB_FN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*(pub\s+)?(async\s+)?(unsafe\s+)?fn\s+").unwrap());
 static KANI_PROOF_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"#\[kani::proof\]").unwrap());
+static FN_CALL_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\b([a-z_][a-z0-9_]*)\s*\(").unwrap());
 
 /// Coverage report for a single crate.
 #[derive(Debug, Clone, Default)]
@@ -104,10 +105,12 @@ pub fn check_coverage(crate_root: &Path) -> anyhow::Result<CoverageReport> {
                 proof_depth += trimmed.matches('{').count() as i32;
                 proof_depth -= trimmed.matches('}').count() as i32;
 
-                // Simple heuristic: any identifier followed by `(` is a call
-                for word in line.split(|c: char| !c.is_alphanumeric() && c != '_') {
-                    if !word.is_empty() && word != "kani" {
-                        proven_fns.insert(word.to_string());
+                // Extract actual function calls: identifiers followed by `(`
+                for cap in FN_CALL_RE.captures_iter(line) {
+                    let name = &cap[1];
+                    // Skip Rust keywords and kani helpers
+                    if !matches!(name, "if" | "for" | "while" | "match" | "let" | "fn" | "return" | "kani") {
+                        proven_fns.insert(name.to_string());
                     }
                 }
 

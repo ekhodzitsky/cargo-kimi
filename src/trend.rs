@@ -82,7 +82,13 @@ fn load_entries(days: Days) -> anyhow::Result<Vec<HistoryEntry>> {
         if line.trim().is_empty() {
             continue;
         }
-        let entry: HistoryEntry = serde_json::from_str(&line)?;
+        let entry: HistoryEntry = match serde_json::from_str(&line) {
+            Ok(e) => e,
+            Err(_) => {
+                eprintln!("Warning: skipping corrupted history entry");
+                continue;
+            }
+        };
         if let Ok(ts) = chrono::DateTime::parse_from_rfc3339(&entry.timestamp) {
             if ts.with_timezone(&chrono::Utc) >= cutoff {
                 entries.push(entry);

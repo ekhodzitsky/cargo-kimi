@@ -293,8 +293,7 @@ fn apply_unwrap_fix(line: &str, return_type: ReturnType) -> String {
                     if is_chained_unwrap(&result, &full_match) {
                         return caps[0].to_string();
                     }
-                    let msg = &caps[1];
-                    format!(r#".ok_or("{}")?"#, msg)
+                    "?".to_string()
                 })
                 .to_string();
             result = UNWRAP_RE
@@ -522,7 +521,7 @@ mod tests {
     fn apply_unwrap_fix_option_expect() {
         let line = r#"let x = y.expect("msg");"#;
         let fixed = apply_unwrap_fix(line, ReturnType::Option);
-        assert_eq!(fixed, r#"let x = y.ok_or("msg")?;"#);
+        assert_eq!(fixed, "let x = y?;");
     }
 
     #[test]

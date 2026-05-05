@@ -229,12 +229,16 @@ pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> 
         {
             in_test_block = true;
             test_block_depth = 0;
+            let (open, close) = count_braces_outside_strings(trimmed);
+            test_block_depth += open;
+            test_block_depth -= close;
             continue;
         }
 
         if in_test_block {
-            test_block_depth += trimmed.matches('{').count() as i32;
-            test_block_depth -= trimmed.matches('}').count() as i32;
+            let (open, close) = count_braces_outside_strings(trimmed);
+            test_block_depth += open;
+            test_block_depth -= close;
             if test_block_depth <= 0 && trimmed == "}" {
                 in_test_block = false;
             }

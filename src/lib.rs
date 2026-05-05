@@ -80,7 +80,7 @@ pub fn cmd_check(strictness: &str, format: &str) -> anyhow::Result<()> {
     println!("\n✅ All checks passed");
 
     // Auto-generate badge if configured or if --format is not json/sarif
-    if format == "text" {
+    if format == "text" && !reports.is_empty() {
         let avg = reports.iter().map(|r| r.score).sum::<u32>() / reports.len() as u32;
         if let Err(e) = badge::write_badge(std::path::Path::new("kimi-score.svg"), badge::BadgeScore::new(avg)) {
             eprintln!("⚠ Failed to write badge: {}", e);
