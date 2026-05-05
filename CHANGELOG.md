@@ -4,6 +4,14 @@ All notable changes to `cargo-kimi` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.6.6] - 2026-05-05
+
+### Changed
+
+- **Repository**: `cargo-kimi` now lives in its own repository at `github.com/ekhodzitsky/cargo-kimi`
+- **CI workflows**: Updated paths for standalone repository layout (no `cargo-kimi/` subdirectory)
+- **Documentation**: All install URLs and GitHub Action references point to the new repository
+
 ## [1.6.5] - 2026-05-05
 
 ### Added
