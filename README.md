@@ -18,7 +18,7 @@
 
 It auto-fixes mechanical issues, tracks improvement over time, and exposes an **LSP server** for real-time editor feedback.
 
-![Demo](assets/demo.svg)
+![Demo](assets/demo.gif)
 
 ---
 

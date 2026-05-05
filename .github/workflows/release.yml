@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: dtolnay/rust-toolchain@ea165f8d65b6e75b540449e92b4886f43607fa02 # stable
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
 
       - name: Run tests
         run: RUST_TEST_THREADS=1 cargo test
@@ -43,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: dtolnay/rust-toolchain@ea165f8d65b6e75b540449e92b4886f43607fa02 # stable
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
         with:
           targets: ${{ matrix.target }}
 
@@ -77,7 +77,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: dtolnay/rust-toolchain@ea165f8d65b6e75b540449e92b4886f43607fa02 # stable
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
 
       - name: Dry-run crates.io publish
         run: cargo publish --dry-run --allow-dirty
@@ -91,7 +91,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: dtolnay/rust-toolchain@ea165f8d65b6e75b540449e92b4886f43607fa02 # stable
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
 
       - name: Publish to crates.io
         run: cargo publish --allow-dirty
