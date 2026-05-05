@@ -13,6 +13,7 @@ pub mod skills;
 pub mod testgen;
 pub mod trend;
 pub mod util;
+pub mod verify;
 pub mod watch;
 pub mod workspace;
 
@@ -108,7 +109,7 @@ pub fn cmd_badge(output: &str, strictness: &str) -> anyhow::Result<()> {
 
 /// { Kani verifier is installed }
 /// fn cmd_verify() -> anyhow::Result<()>
-/// { runs cargo kani on the current workspace }
+/// { checks proof coverage, then runs cargo kani on the current workspace }
 pub fn cmd_verify() -> anyhow::Result<()> {
     println!("=== Checking Kani installation ===");
     let status = Command::new("cargo")
@@ -122,6 +123,10 @@ pub fn cmd_verify() -> anyhow::Result<()> {
             );
         }
     }
+
+    println!("\n=== Checking formal verification coverage ===");
+    let coverage = verify::check_coverage(std::env::current_dir()?.as_path())?;
+    verify::print_coverage(&coverage);
 
     println!("\n=== Running cargo kani ===");
     let status = Command::new("cargo").args(["kani"]).status()?;
