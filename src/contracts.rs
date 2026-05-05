@@ -1,4 +1,6 @@
 // kimi:score-ignore=unsafe,unwrap
+use colored::*;
+use comfy_table::{modifiers::UTF8_ROUND_CORNERS, ContentArrangement, Table};
 use regex::Regex;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -647,6 +649,33 @@ pub fn print_sarif(reports: &[FileReport]) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn score_badge(score: u32) -> ColoredString {
+    match score {
+        80..=100 => format!("🥇 {}/100", score).green().bold(),
+        60..=79 => format!("🟡 {}/100", score).yellow().bold(),
+        40..=59 => format!("🟠 {}/100", score).truecolor(255, 165, 0).bold(),
+        _ => format!("🔴 {}/100", score).red().bold(),
+    }
+}
+
+fn severity_emoji(sev: Severity) -> &'static str {
+    match sev {
+        Severity::Critical => "🔴",
+        Severity::Major => "🟠",
+        Severity::Minor => "🟡",
+        Severity::Info => "🔵",
+    }
+}
+
+fn severity_style(sev: Severity) -> ColoredString {
+    match sev {
+        Severity::Critical => "CRITICAL".red().bold(),
+        Severity::Major => "MAJOR".truecolor(255, 165, 0).bold(),
+        Severity::Minor => "MINOR".yellow(),
+        Severity::Info => "INFO".blue(),
+    }
+}
+
     /// { reports are valid check results }
     /// pub fn print_reports(reports: &[FileReport])
     /// { prints per-file issues, scores, and project average to stdout }
@@ -658,17 +687,38 @@ pub fn print_reports(reports: &[FileReport]) {
     let mut info = 0;
     let mut total_score = 0u32;
 
+    println!("\n{}", "═══════════════════════════════════════════".dimmed());
+    println!("  {}  {}", "🛡️  Kimi Contract Check".bold(), "Results".dimmed());
+    println!("{}", "═══════════════════════════════════════════".dimmed());
+
+    // Summary table
+    let mut table = Table::new();
+    table
+        .load_preset(comfy_table::presets::UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_header(vec![
+            "File".bold().to_string(),
+            "Score".bold().to_string(),
+            "Issues".bold().to_string(),
+        ]);
+
     for report in reports {
-        println!("\n{} (score: {})", report.file.display(), report.score);
+        let file_name = report.file.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_else(|| report.file.display().to_string());
+        let issue_count = report.issues.len();
+        let issue_str = if issue_count == 0 {
+            "✅ 0".green().to_string()
+        } else {
+            format!("⚠️  {}", issue_count).yellow().to_string()
+        };
+        table.add_row(vec![
+            file_name,
+            score_badge(report.score).to_string(),
+            issue_str,
+        ]);
+
+        total_score += report.score;
         for issue in &report.issues {
-            let sev_str = match issue.severity {
-                Severity::Critical => "CRITICAL",
-                Severity::Major => "MAJOR",
-                Severity::Minor => "MINOR",
-                Severity::Info => "INFO",
-            };
-            let exempt_tag = if is_exempt(issue, &report.exemptions) { " [EXEMPT]" } else { "" };
-            println!("  [{}] L{}: {}{}", sev_str, issue.line, issue.message, exempt_tag);
             total_issues += 1;
             match issue.severity {
                 Severity::Critical => critical += 1,
@@ -677,20 +727,62 @@ pub fn print_reports(reports: &[FileReport]) {
                 Severity::Info => info += 1,
             }
         }
-        total_score += report.score;
     }
 
+    if !reports.is_empty() {
+        println!("\n{}", table);
+    }
+
+    // Detailed issues per file
+    for report in reports {
+        if report.issues.is_empty() {
+            continue;
+        }
+        println!(
+            "\n📄 {} {}",
+            report.file.display().to_string().underline(),
+            format!("({})", score_badge(report.score)).dimmed()
+        );
+        for issue in &report.issues {
+            let sev = severity_style(issue.severity);
+            let exempt_tag = if is_exempt(issue, &report.exemptions) {
+                " [EXEMPT]".dimmed().to_string()
+            } else {
+                String::new()
+            };
+            println!(
+                "  {} {} {} {} {}",
+                severity_emoji(issue.severity),
+                sev,
+                format!("L{}", issue.line).dimmed(),
+                issue.message,
+                exempt_tag
+            );
+        }
+    }
+
+    println!("\n{}", "───────────────────────────────────────────".dimmed());
+
     if total_issues == 0 {
-        println!("✅ All contracts satisfied.");
+        println!("  ✅ {}  {}", "All contracts satisfied!".green().bold(), "🎉".green());
     } else {
         println!(
-            "\nFound {} issues (CRITICAL: {}, MAJOR: {}, MINOR: {}, INFO: {})",
-            total_issues, critical, major, minor, info
+            "  {} {}  {} {}  {} {}  {} {}",
+            "🔴".red(), format!("{}", critical).red().bold(),
+            "🟠".truecolor(255, 165, 0), format!("{}", major).truecolor(255, 165, 0).bold(),
+            "🟡".yellow(), format!("{}", minor).yellow().bold(),
+            "🔵".blue(), format!("{}", info).blue().bold(),
         );
     }
 
     if !reports.is_empty() {
         let avg = total_score / reports.len() as u32;
-        println!("Average score: {}/100", avg);
+        println!(
+            "  {} {}",
+            "Average score:".bold(),
+            score_badge(avg)
+        );
     }
+
+    println!("{}", "═══════════════════════════════════════════".dimmed());
 }

@@ -61,6 +61,15 @@ pub enum Commands {
         #[arg(short, long, default_value_t = 30)]
         days: u32,
     },
+    /// Generate an SVG score badge
+    Badge {
+        /// Output path for the SVG badge (default: kimi-score.svg)
+        #[arg(short, long, default_value = "kimi-score.svg")]
+        output: String,
+        /// Strictness level for contract checker
+        #[arg(short, long, value_name = "LEVEL", default_value = "standard")]
+        strictness: String,
+    },
     /// Auto-fix contract issues
     Fix {
         /// Show what would be fixed without writing files
@@ -118,5 +127,6 @@ pub fn run() -> anyhow::Result<()> {
             format,
             debounce_ms,
         } => crate::watch::run_watch(&strictness, &format, debounce_ms),
+        Commands::Badge { output, strictness } => crate::cmd_badge(&output, &strictness),
     }
 }

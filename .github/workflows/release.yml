@@ -14,12 +14,12 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@ea165f8d65b6e75b540449e92b4886f43607fa02 # stable
 
       - name: Run tests
-        run: cargo test
+        run: RUST_TEST_THREADS=1 cargo test
 
   build:
     name: Build Release Binary
@@ -41,9 +41,9 @@ jobs:
             ext: ".exe"
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@ea165f8d65b6e75b540449e92b4886f43607fa02 # stable
         with:
           targets: ${{ matrix.target }}
 
@@ -64,7 +64,7 @@ jobs:
           cp target/${{ matrix.target }}/release/cargo-kimi.exe dist/cargo-kimi-${{ matrix.target }}.exe
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: cargo-kimi-${{ matrix.target }}
           path: dist/cargo-kimi-${{ matrix.target }}${{ matrix.ext }}
@@ -75,9 +75,9 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@ea165f8d65b6e75b540449e92b4886f43607fa02 # stable
 
       - name: Dry-run crates.io publish
         run: cargo publish --dry-run --allow-dirty
@@ -91,10 +91,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v4
         with:
           path: dist
           pattern: cargo-kimi-*
@@ -107,7 +107,7 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: cargo-kimi ${{ steps.version.outputs.version }}
           files: dist/cargo-kimi-*

@@ -1,0 +1,6 @@
+[contracts]
+strictness = "standard"
+fail-on-drop = 60
+
+[score]
+ignore = ["tests/", "benches/"]

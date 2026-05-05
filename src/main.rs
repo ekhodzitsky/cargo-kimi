@@ -1,4 +1,6 @@
+mod badge;
 mod cli;
+mod config;
 mod contracts;
 mod fix;
 mod init;
@@ -20,6 +22,10 @@ fn main() -> anyhow::Result<()> {
 /// fn cmd_check(strictness: &str, format: &str) -> anyhow::Result<()>
 /// { runs contract checker, prints reports, then clippy + tests }
 fn cmd_check(strictness: &str, format: &str) -> anyhow::Result<()> {
+    let cfg = config::load_config(None)?;
+    let strictness = cfg.strictness().unwrap_or(strictness);
+    let format = cfg.output_format().unwrap_or(format);
+
     let config = contracts::CheckConfig::from_strictness(strictness)?;
     let paths = workspace::find_workspace_crates()?;
     let reports = contracts::check_files(&paths, &config)?;
@@ -88,6 +94,32 @@ fn cmd_check(strictness: &str, format: &str) -> anyhow::Result<()> {
     }
 
     println!("\n✅ All checks passed");
+
+    // Auto-generate badge if configured or if --format is not json/sarif
+    if format == "text" {
+        let avg = reports.iter().map(|r| r.score).sum::<u32>() / reports.len() as u32;
+        if let Err(e) = badge::write_badge(std::path::Path::new("kimi-score.svg"), avg) {
+            eprintln!("⚠ Failed to write badge: {}", e);
+        }
+    }
+
+    Ok(())
+}
+
+    /// { output is a valid path, strictness is valid }
+    /// fn cmd_badge(output: &str, strictness: &str) -> anyhow::Result<()>
+    /// { runs contract check and writes SVG badge to output path }
+fn cmd_badge(output: &str, strictness: &str) -> anyhow::Result<()> {
+    let config = contracts::CheckConfig::from_strictness(strictness)?;
+    let paths = workspace::find_workspace_crates()?;
+    let reports = contracts::check_files(&paths, &config)?;
+    let avg = if reports.is_empty() {
+        0
+    } else {
+        reports.iter().map(|r| r.score).sum::<u32>() / reports.len() as u32
+    };
+    badge::write_badge(std::path::Path::new(output), avg)?;
+    println!("✅ Badge written to {} (score: {})", output, avg);
     Ok(())
 }
 

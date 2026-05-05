@@ -2,6 +2,8 @@
 
 Cargo subcommand for [kimi-dotfiles](https://github.com/ekhodzitsky/cargo-kimi) — structured contracts for Rust.
 
+![Kimi Score](kimi-score.svg)
+
 ## Installation
 
 ```bash
@@ -32,7 +34,10 @@ Run mechanized checks and compute a 0–100 contract score.
 cargo kimi check                   # Standard strictness + clippy + tests
 cargo kimi check --strictness strict
 cargo kimi check --format json     # Pure JSON output for CI (no clippy/test)
+cargo kimi check --format sarif    # SARIF for GitHub Code Scanning
 ```
+
+`cargo kimi check` now features a rich, colorized terminal output with tables, severity emojis, and per-file score badges. It also auto-generates `kimi-score.svg` after each text run.
 
 Scoring breakdown:
 - Hoare triples on `pub fn` — 30 pts
@@ -71,6 +76,17 @@ cargo kimi trend --days 30
 
 Scores are appended to `.kimi/score-history.jsonl` after every `cargo kimi check`.
 
+### `cargo kimi badge`
+
+Generate an SVG score badge for your README.
+
+```bash
+cargo kimi badge                   # writes kimi-score.svg
+cargo kimi badge --output assets/badge.svg
+```
+
+Perfect for showing off your contract quality in GitHub READMEs.
+
 ### `cargo kimi verify`
 
 Run formal verification with Kani (requires `kani-verifier`).
@@ -97,6 +113,24 @@ cargo kimi mcp
 
 Exposes the `check_contracts` tool natively — no shell execution required.
 
+## Configuration
+
+Create `.kimi.toml` (or `kimi.toml`) in your project root:
+
+```toml
+[contracts]
+strictness = "standard"
+fail-on-drop = 60
+
+[score]
+ignore = ["tests/", "benches/"]
+
+[output]
+format = "rich"
+```
+
+When present, `cargo kimi` automatically reads these values as defaults for `check`, `watch`, and `badge`.
+
 ## Strictness Levels
 
 - `relaxed` — Only critical violations fail
@@ -112,6 +146,7 @@ Exposes the `check_contracts` tool natively — no shell execution required.
 | `--yes` | Skip confirmation prompts |
 | `--dry-run` | Preview changes without applying (`fix` only) |
 | `--days <N>` | Number of days for trend chart (`trend` only) |
+| `--output <PATH>` | Badge output path (`badge` only) |
 
 ## Kimi Skills
 

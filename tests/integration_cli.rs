@@ -130,6 +130,34 @@ fn check_sarif_output_is_valid() {
 }
 
 #[test]
+fn badge_generates_svg() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::create_dir(tmp.path().join("src")).unwrap();
+    fs::write(
+        tmp.path().join("Cargo.toml"),
+        r#"[package]
+name = "tmp"
+version = "0.1.0"
+edition = "2021"
+"#,
+    )
+    .unwrap();
+    fs::write(tmp.path().join("src/lib.rs"), "pub fn foo() {}\n").unwrap();
+
+    let mut cmd = Command::cargo_bin("cargo-kimi").unwrap();
+    cmd.current_dir(&tmp)
+        .arg("badge")
+        .arg("--strictness")
+        .arg("standard");
+    cmd.assert().success();
+    let badge_path = tmp.path().join("kimi-score.svg");
+    assert!(badge_path.exists());
+    let content = fs::read_to_string(&badge_path).unwrap();
+    assert!(content.contains("<svg"));
+    assert!(content.contains("kimi"));
+}
+
+#[test]
 fn watch_help_shows_debounce_option() {
     let mut cmd = Command::cargo_bin("cargo-kimi").unwrap();
     cmd.arg("watch").arg("--help");

@@ -4,6 +4,21 @@ All notable changes to `cargo-kimi` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Added
+
+- **Rich terminal output**: `cargo kimi check` now displays colorized tables, severity emojis, and per-file score badges using `comfy-table` and `colored`
+- **`cargo kimi badge`**: Generate SVG score badges for READMEs (`kimi-score.svg`)
+- **`.kimi.toml` configuration**: Project-level config for `strictness`, `fail-on-drop`, `ignore` paths, and default `format`
+- **Auto-badge generation**: `cargo kimi check` automatically writes `kimi-score.svg` after each text run
+- **Integration test** for badge generation
+
+### Changed
+
+- **CI**: Run tests with `RUST_TEST_THREADS=1` to avoid `cargo metadata` lock contention in integration tests
+- **Dogfood workflow**: Auto-commit generated `kimi-score.svg` on every push
+
 ## [1.6.6] - 2026-05-05
 
 ### Changed
