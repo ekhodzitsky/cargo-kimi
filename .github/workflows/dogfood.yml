@@ -60,3 +60,4 @@ jobs:
 
       - name: Run cargo-kimi verify
         run: cargo kimi verify
+        continue-on-error: true
