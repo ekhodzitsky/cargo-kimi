@@ -141,13 +141,20 @@ fn compute_fixes(_path: &Path, content: &str, issues: &[crate::contracts::Issue]
 }
 
 fn fix_missing_hoare(lines: &[&str], fn_line_idx: usize) -> Option<Fix> {
-    // Find insertion point: before the first doc comment in the contiguous block,
-    // or before the fn line itself.
-    let mut insert_at = fn_line_idx;
+    let sig = extract_fn_signature(lines, fn_line_idx);
+    let hoare = format!(
+        "/// {{ TODO: precondition }}\n/// `{}`\n/// {{ TODO: postcondition }}",
+        sig
+    );
+
+    // Find the closest doc-comment line right before the function
+    // (skipping blank lines and attributes).
+    let mut last_doc_idx = None;
     for j in (0..fn_line_idx).rev() {
         let t = lines[j].trim();
         if t.starts_with("///") {
-            insert_at = j;
+            last_doc_idx = Some(j);
+            break;
         } else if t.is_empty() || t.starts_with("#[") {
             continue;
         } else {
@@ -155,16 +162,20 @@ fn fix_missing_hoare(lines: &[&str], fn_line_idx: usize) -> Option<Fix> {
         }
     }
 
-    let sig = extract_fn_signature(lines, fn_line_idx);
-    let doc = format!(
-        "/// {{ TODO: precondition }}\n/// {}\n/// {{ TODO: postcondition }}",
-        sig
-    );
-
-    Some(Fix::InsertBefore {
-        line: insert_at + 1, // 1-based
-        text: doc,
-    })
+    if let Some(idx) = last_doc_idx {
+        // Insert after the existing doc block so the description is preserved
+        // and the Hoare triple sits right before the function.
+        Some(Fix::InsertBefore {
+            line: idx + 2, // 1-based, after the last doc line
+            text: hoare,
+        })
+    } else {
+        // No existing doc comments — insert before the function.
+        Some(Fix::InsertBefore {
+            line: fn_line_idx + 1,
+            text: hoare,
+        })
+    }
 }
 
 fn fix_missing_safety(lines: &[&str], unsafe_line_idx: usize) -> Option<Fix> {
@@ -547,6 +558,37 @@ mod tests {
                 assert_eq!(text, "    // SAFETY: TODO: explain why this is safe");
             }
             _ => panic!("expected InsertBefore fix"),
+        }
+    }
+
+    #[test]
+    fn fix_missing_hoare_without_doc_inserts_before_fn() {
+        let lines = vec!["pub fn foo() {", "}"];
+        let fix = fix_missing_hoare(&lines, 0).unwrap();
+        match fix {
+            Fix::InsertBefore { line, text } => {
+                assert_eq!(line, 1);
+                assert!(text.contains("/// { TODO: precondition }"));
+                assert!(text.contains("`pub fn foo()`"));
+                assert!(text.contains("/// { TODO: postcondition }"));
+            }
+            _ => panic!("expected InsertBefore"),
+        }
+    }
+
+    #[test]
+    fn fix_missing_hoare_with_existing_doc_inserts_after_doc() {
+        let lines = vec!["/// Some description", "pub fn foo() {", "}"];
+        let fix = fix_missing_hoare(&lines, 1).unwrap();
+        match fix {
+            Fix::InsertBefore { line, text } => {
+                // Insert after the doc line (1-based line 1), so before line 2
+                assert_eq!(line, 2);
+                assert!(text.contains("/// { TODO: precondition }"));
+                assert!(text.contains("`pub fn foo()`"));
+                assert!(text.contains("/// { TODO: postcondition }"));
+            }
+            _ => panic!("expected InsertBefore"),
         }
     }
 }

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`cargo kimi fix` preserves doc comments**: When a `pub fn` already has a descriptive doc block, the Hoare triple is now inserted **after** the existing description instead of replacing it. Also wraps the signature in backticks to avoid rustdoc HTML warnings.
+
 ## [1.6.7] - 2026-05-05
 
 ### Added
