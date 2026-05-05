@@ -4,6 +4,19 @@ All notable changes to `cargo-kimi` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.6.5] - 2026-05-05
+
+### Added
+
+- **`cargo kimi watch`**: Continuous filesystem watcher that re-runs contract checks on every `.rs` save
+- **`--format sarif`**: SARIF 2.1.0 output for GitHub Code Scanning integration
+- **Unit test coverage** for `unsafe` block auto-fix (`fix_missing_safety_inserts_comment`)
+- **Integration tests** for SARIF validity and `watch --help`
+
+### Fixed
+
+- **CI deprecation warnings**: Added `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` to all GitHub Actions workflows
+
 ## [1.6.4] - 2026-05-05
 
 ### Added
