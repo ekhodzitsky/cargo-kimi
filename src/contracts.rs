@@ -635,7 +635,7 @@ pub fn print_sarif(reports: &[FileReport]) -> anyhow::Result<()> {
             "tool": {
                 "driver": {
                     "name": "cargo-kimi",
-                    "informationalUri": "https://github.com/ekhodzitsky/kimi-dotfiles",
+                    "informationalUri": "https://github.com/ekhodzitsky/cargo-kimi",
                     "rules": rules.values().collect::<Vec<_>>(),
                 }
             },

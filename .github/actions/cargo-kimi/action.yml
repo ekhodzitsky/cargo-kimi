@@ -1,0 +1,165 @@
+name: 'cargo-kimi'
+description: 'Run kimi-dotfiles contract checks on a Rust project'
+author: 'ekhodzitsky'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  strictness:
+    description: 'Strictness level (relaxed, standard, strict)'
+    required: false
+    default: 'standard'
+  fail-on-drop:
+    description: 'Fail CI if project average score drops below this threshold (0-100). 0 = disabled.'
+    required: false
+    default: '0'
+  post-comment:
+    description: 'Post a PR comment with results'
+    required: false
+    default: 'true'
+  token:
+    description: 'GitHub token for PR comments'
+    required: false
+    default: ${{ github.token }}
+  version:
+    description: 'Version of cargo-kimi to install (default: latest)'
+    required: false
+    default: 'latest'
+
+outputs:
+  score:
+    description: 'Project average contract score (0-100)'
+  issues:
+    description: 'Total number of issues found'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install cargo-kimi
+      shell: bash
+      run: |
+        if [ "${{ inputs.version }}" = "latest" ]; then
+          cargo install cargo-kimi --locked
+        else
+          cargo install cargo-kimi --version "${{ inputs.version }}" --locked
+        fi
+
+    - name: Run contract checks
+      id: check
+      shell: bash
+      run: |
+        set +e
+        cargo kimi check --strictness "${{ inputs.strictness }}" --format json > /tmp/kimi-report.json 2>&1
+        EXIT_CODE=$?
+        set -e
+
+        # Extract the first JSON document from mixed output
+        python3 << 'PYEOF' > /tmp/kimi-stats.txt
+        import json
+        with open("/tmp/kimi-report.json") as f:
+            text = f.read()
+        start = text.find("[")
+        if start != -1:
+            try:
+                data, end = json.JSONDecoder().raw_decode(text, start)
+                with open("/tmp/kimi-clean.json", "w") as out:
+                    json.dump(data, out)
+                total_issues = sum(len(r.get("issues", [])) for r in data)
+                scores = [r.get("score", 0) for r in data if r.get("score", 0) > 0]
+                avg = sum(scores) // len(scores) if scores else 0
+                print(f"score={avg}")
+                print(f"issues={total_issues}")
+            except json.JSONDecodeError:
+                print("score=0")
+                print("issues=0")
+        else:
+            print("score=0")
+            print("issues=0")
+        PYEOF
+
+        cat /tmp/kimi-stats.txt >> "$GITHUB_OUTPUT"
+        cat /tmp/kimi-report.json
+
+        # Fail on score drop check
+        THRESHOLD="${{ inputs.fail-on-drop }}"
+        if [ "$THRESHOLD" != "0" ]; then
+          SCORE=$(grep "^score=" /tmp/kimi-stats.txt | cut -d= -f2)
+          if [ "$SCORE" -lt "$THRESHOLD" ]; then
+            echo "❌ Score $SCORE is below threshold $THRESHOLD"
+            exit 1
+          fi
+          echo "✅ Score $SCORE meets threshold $THRESHOLD"
+        fi
+
+        exit $EXIT_CODE
+
+    - name: Post PR comment
+      if: inputs.post-comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        python3 << 'PYEOF'
+        import json, os, urllib.request
+
+        with open("/tmp/kimi-clean.json") as f:
+            reports = json.load(f)
+
+        total_issues = sum(len(r.get("issues", [])) for r in reports)
+        scores = [r.get("score", 0) for r in reports if r.get("score", 0) > 0]
+        avg = sum(scores) // len(scores) if scores else 0
+
+        def badge(score):
+            if score >= 80: return "🟢"
+            if score >= 60: return "🟡"
+            if score >= 40: return "🟠"
+            return "🔴"
+
+        body = f"## {badge(avg)} Kimi Contract Check — Score: **{avg}/100**\n\n"
+        body += f"**Total issues:** {total_issues}  \n"
+        body += "| File | Score | Issues |\n"
+        body += "|------|-------|--------|\n"
+        for r in reports:
+            file = r["file"].split("/")[-1]
+            score = r.get("score", 0)
+            issues = len(r.get("issues", []))
+            body += f"| `{file}` | {badge(score)} {score} | {issues} |\n"
+
+        body += "\n<details><summary>Full details</summary>\n\n"
+        for r in reports:
+            if r.get("issues"):
+                body += f"\n**{r['file']}** (score: {r.get('score', 0)})\n"
+                for i in r["issues"]:
+                    sev = i["severity"]
+                    emoji = {"Critical": "🔴", "Major": "🟠", "Minor": "🟡", "Info": "🔵"}.get(sev, "⚪")
+                    body += f"- {emoji} `[{sev}]` L{i['line']}: {i['message']}\n"
+        body += "\n</details>\n"
+
+        pr_url = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/issues/{os.environ['GITHUB_EVENT_NAME']}"
+        # For pull_request events, PR number is in GITHUB_REF_NAME or event file
+        event_path = os.environ.get("GITHUB_EVENT_PATH", "")
+        with open(event_path) as f:
+            event = json.load(f)
+        pr_number = event.get("pull_request", {}).get("number")
+        if not pr_number:
+            print("No PR number found, skipping comment")
+            exit(0)
+
+        comment_url = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/issues/{pr_number}/comments"
+        headers = {
+            "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json",
+        }
+        data = json.dumps({"body": body}).encode()
+        req = urllib.request.Request(comment_url, data=data, headers=headers, method="POST")
+        try:
+            urllib.request.urlopen(req)
+            print("Comment posted successfully")
+        except urllib.error.HTTPError as e:
+            print(f"Failed to post comment: {e.read().decode()}")
+        PYEOF

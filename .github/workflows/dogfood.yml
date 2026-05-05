@@ -1,0 +1,35 @@
+name: Dogfood
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**'
+      - '.github/workflows/dogfood.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**'
+      - '.github/workflows/dogfood.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  check-self:
+    name: cargo-kimi checks itself
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-kimi
+        run: cargo install --path . --locked
+
+      - name: Run cargo-kimi check
+        run: cargo kimi check --strictness standard
+
+      - name: Run cargo-kimi verify
+        run: cargo kimi verify

@@ -1,11 +1,11 @@
 # cargo-kimi
 
-Cargo subcommand for [kimi-dotfiles](https://github.com/ekhodzitsky/kimi-dotfiles) — structured contracts for Rust.
+Cargo subcommand for [kimi-dotfiles](https://github.com/ekhodzitsky/cargo-kimi) — structured contracts for Rust.
 
 ## Installation
 
 ```bash
-cargo install --git https://github.com/ekhodzitsky/kimi-dotfiles cargo-kimi
+cargo install --git https://github.com/ekhodzitsky/cargo-kimi cargo-kimi
 ```
 
 ## Commands
@@ -143,7 +143,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - uses: ekhodzitsky/kimi-dotfiles/.github/actions/cargo-kimi@main
+      - uses: ekhodzitsky/cargo-kimi/.github/actions/cargo-kimi@main
         with:
           strictness: standard
           fail-on-drop: 60

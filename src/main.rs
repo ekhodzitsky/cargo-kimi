@@ -156,7 +156,7 @@ fn cmd_generate_tests(output: Option<&str>) -> anyhow::Result<()> {
 fn cmd_upgrade() -> anyhow::Result<()> {
     println!("To upgrade cargo-kimi, run:");
     println!(
-        "  cargo install --force --git https://github.com/ekhodzitsky/kimi-dotfiles cargo-kimi"
+        "  cargo install --force --git https://github.com/ekhodzitsky/cargo-kimi cargo-kimi"
     );
     println!("\nTo update project guidelines, re-run:");
     println!("  cargo kimi init --template rust-only --yes");
