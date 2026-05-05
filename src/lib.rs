@@ -1,3 +1,6 @@
+#[allow(dead_code)]
+pub struct Score(pub(crate) u32);
+
 pub mod badge;
 pub mod cli;
 pub mod config;
@@ -78,7 +81,7 @@ pub fn cmd_check(strictness: &str, format: &str) -> anyhow::Result<()> {
     // Auto-generate badge if configured or if --format is not json/sarif
     if format == "text" {
         let avg = reports.iter().map(|r| r.score).sum::<u32>() / reports.len() as u32;
-        if let Err(e) = badge::write_badge(std::path::Path::new("kimi-score.svg"), avg) {
+        if let Err(e) = badge::write_badge(std::path::Path::new("kimi-score.svg"), badge::BadgeScore::new(avg)) {
             eprintln!("⚠ Failed to write badge: {}", e);
         }
     }
@@ -98,7 +101,7 @@ pub fn cmd_badge(output: &str, strictness: &str) -> anyhow::Result<()> {
     } else {
         reports.iter().map(|r| r.score).sum::<u32>() / reports.len() as u32
     };
-    badge::write_badge(std::path::Path::new(output), avg)?;
+    badge::write_badge(std::path::Path::new(output), badge::BadgeScore::new(avg))?;
     println!("✅ Badge written to {} (score: {})", output, avg);
     Ok(())
 }

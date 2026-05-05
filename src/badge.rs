@@ -1,7 +1,23 @@
+#[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
+pub struct BadgeScore(u32);
+
+impl BadgeScore {
+#[allow(dead_code)]
+    pub(crate) fn new(value: u32) -> Self {
+        Self(value)
+    }
+
+    pub(crate) fn get(self) -> u32 {
+        self.0
+    }
+}
+
 /// { score is 0–100 }
 /// pub fn generate_svg(score: u32) -> String
 /// { returns a shields.io-style SVG badge }
-pub fn generate_svg(score: u32) -> String {
+pub fn generate_svg(score: BadgeScore) -> String {
+    let score = score.get();
     let label = "kimi";
     let value = format!("{}/100", score);
 
@@ -59,7 +75,7 @@ pub fn generate_svg(score: u32) -> String {
     /// { path is a valid file path }
     /// pub fn write_badge(path: &std::path::Path, score: u32) -> anyhow::Result<()>
     /// { writes SVG badge to disk }
-pub fn write_badge(path: &std::path::Path, score: u32) -> anyhow::Result<()> {
+pub fn write_badge(path: &std::path::Path, score: BadgeScore) -> anyhow::Result<()> {
     let svg = generate_svg(score);
     std::fs::write(path, svg)?;
     Ok(())
@@ -71,7 +87,7 @@ mod tests {
 
     #[test]
     fn generate_svg_includes_score() {
-        let svg = generate_svg(85);
+        let svg = generate_svg(BadgeScore::new(85));
         assert!(svg.contains("85/100"));
         assert!(svg.contains("kimi"));
         assert!(svg.starts_with("<svg"));
@@ -79,19 +95,19 @@ mod tests {
 
     #[test]
     fn generate_svg_color_ranges() {
-        let excellent = generate_svg(90);
+        let excellent = generate_svg(BadgeScore::new(90));
         assert!(excellent.contains("#4CAF50")); // green
 
-        let good = generate_svg(70);
+        let good = generate_svg(BadgeScore::new(70));
         assert!(good.contains("#8BC34A")); // light green
 
-        let warning = generate_svg(50);
+        let warning = generate_svg(BadgeScore::new(50));
         assert!(warning.contains("#FFC107")); // yellow
 
-        let poor = generate_svg(30);
+        let poor = generate_svg(BadgeScore::new(30));
         assert!(poor.contains("#FF9800")); // orange
 
-        let critical = generate_svg(10);
+        let critical = generate_svg(BadgeScore::new(10));
         assert!(critical.contains("#F44336")); // red
     }
 }

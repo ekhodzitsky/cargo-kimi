@@ -308,3 +308,5 @@ mod tests {
         assert!(issue_to_code_action(&issue).is_none());
     }
 }
+#[allow(dead_code)]
+pub struct LspUri(pub(crate) String);

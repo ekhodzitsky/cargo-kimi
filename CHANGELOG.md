@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.6.7] - 2026-05-05
+
 ### Added
 
 - **Rich terminal output**: `cargo kimi check` now displays colorized tables, severity emojis, and per-file score badges using `comfy-table` and `colored`
@@ -18,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **CI**: Run tests with `RUST_TEST_THREADS=1` to avoid `cargo metadata` lock contention in integration tests
 - **Dogfood workflow**: Auto-commit generated `kimi-score.svg` on every push
+- **Contract score**: Raised average project score from 69 to 80 by adding newtype wrappers and refactoring long functions
 
 ### Fixed
 

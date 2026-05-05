@@ -8,12 +8,14 @@ static UNWRAP_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\.unwrap\(\)")
 static EXPECT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"\.expect\("([^"]*)"\)"#).unwrap());
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 enum Fix {
     InsertBefore { line: usize, text: String },
     ReplaceLine { line: usize, new_text: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(dead_code)]
 enum ReturnType {
     Result,
     Option,
@@ -548,3 +550,6 @@ mod tests {
         }
     }
 }
+
+#[allow(dead_code)]
+pub struct FixIndex(pub(crate) usize);

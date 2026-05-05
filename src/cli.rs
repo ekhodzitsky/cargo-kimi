@@ -137,3 +137,5 @@ pub fn run() -> anyhow::Result<()> {
         Commands::Lsp => crate::lsp::run_lsp(),
     }
 }
+#[allow(dead_code)]
+pub struct CommandName(pub(crate) String);

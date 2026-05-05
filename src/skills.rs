@@ -26,33 +26,38 @@ Describe the scenarios where this skill should be used.
 ```
 "#;
 
-/// { name matches ^[a-z0-9-]+$ }
-/// pub fn cmd_skill_init(name: &str, description: Option<&str>) -> anyhow::Result<()>
-/// { creates .kimi/skills/{name}/SKILL.md with YAML frontmatter }
-pub fn cmd_skill_init(name: &str, description: Option<&str>) -> anyhow::Result<()> {
-    if name.is_empty() {
-        anyhow::bail!("Skill name cannot be empty");
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct SkillName(String);
+
+impl SkillName {
+#[allow(dead_code)]
+    pub(crate) fn new(name: &str) -> anyhow::Result<Self> {
+        if name.is_empty() {
+            anyhow::bail!("Skill name cannot be empty");
+        }
+        if name.starts_with('.') || name.contains('/') || name.contains('\\') || name.contains("..")
+        {
+            anyhow::bail!(
+                "Skill name cannot contain path separators, parent directory references, or leading dots"
+            );
+        }
+        if !name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        {
+            anyhow::bail!("Skill name must match ^[a-z0-9-]+$");
+        }
+        Ok(Self(name.to_string()))
     }
-    if name.starts_with('.') || name.contains('/') || name.contains('\\') || name.contains("..") {
-        anyhow::bail!(
-            "Skill name cannot contain path separators, parent directory references, or leading dots"
-        );
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
     }
-    if !name
-        .chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-    {
-        anyhow::bail!("Skill name must match ^[a-z0-9-]+$");
-    }
-    let skill_dir = format!(".kimi/skills/{}", name);
-    fs::create_dir_all(&skill_dir)?;
-    let skill_path = format!("{}/SKILL.md", skill_dir);
-    if Path::new(&skill_path).exists() {
-        anyhow::bail!("Skill '{}' already exists at {}", name, skill_path);
-    }
-    let desc = description.unwrap_or("TODO: describe what this skill does");
-    let title = name
-        .split('-')
+}
+
+fn to_title_case(s: &str) -> String {
+    s.split('-')
         .map(|w| {
             let mut c = w.chars();
             match c.next() {
@@ -61,9 +66,24 @@ pub fn cmd_skill_init(name: &str, description: Option<&str>) -> anyhow::Result<(
             }
         })
         .collect::<Vec<_>>()
-        .join(" ");
+        .join(" ")
+}
+
+/// { name matches ^[a-z0-9-]+$ }
+/// pub fn cmd_skill_init(name: &str, description: Option<&str>) -> anyhow::Result<()>
+/// { creates .kimi/skills/{name}/SKILL.md with YAML frontmatter }
+pub fn cmd_skill_init(name: &str, description: Option<&str>) -> anyhow::Result<()> {
+    let skill_name = SkillName::new(name)?;
+    let skill_dir = format!(".kimi/skills/{}", skill_name.as_str());
+    fs::create_dir_all(&skill_dir)?;
+    let skill_path = format!("{}/SKILL.md", skill_dir);
+    if Path::new(&skill_path).exists() {
+        anyhow::bail!("Skill '{}' already exists at {}", name, skill_path);
+    }
+    let desc = description.unwrap_or("TODO: describe what this skill does");
+    let title = to_title_case(skill_name.as_str());
     let content = SKILL_TEMPLATE
-        .replace("{name}", name)
+        .replace("{name}", skill_name.as_str())
         .replace("{description}", desc)
         .replace("{title}", &title);
     fs::write(&skill_path, content)?;

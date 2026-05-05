@@ -143,3 +143,6 @@ fn resolve_clippy(level: &str) -> anyhow::Result<&'static str> {
         ),
     }
 }
+
+#[allow(dead_code)]
+pub struct TemplateName(pub(crate) String);

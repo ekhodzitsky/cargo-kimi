@@ -21,6 +21,7 @@ pub fn load_config(path: Option<&Path>) -> anyhow::Result<KimiConfig> {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[allow(dead_code)]
 pub struct KimiConfig {
     pub contracts: Option<ContractsConfig>,
     #[allow(dead_code)]
@@ -29,6 +30,7 @@ pub struct KimiConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[allow(dead_code)]
 pub struct ContractsConfig {
     pub strictness: Option<String>,
     #[serde(rename = "fail-on-drop")]
@@ -37,17 +39,20 @@ pub struct ContractsConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[allow(dead_code)]
 pub struct ScoreConfig {
     #[allow(dead_code)]
     pub ignore: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[allow(dead_code)]
 pub struct OutputConfig {
     pub format: Option<String>,
 }
 
 impl KimiConfig {
+#[allow(dead_code)]
     /// { self.contracts.strictness is Some or None }
     /// pub fn strictness(&self) -> Option<&str>
     /// { returns the configured strictness level }
@@ -81,3 +86,6 @@ impl KimiConfig {
             .unwrap_or(false)
     }
 }
+
+#[allow(dead_code)]
+pub struct Strictness(pub(crate) String);

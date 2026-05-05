@@ -27,3 +27,5 @@ pub fn validate_project_path(path: &Path) -> anyhow::Result<PathBuf> {
     }
     Ok(normalized)
 }
+#[allow(dead_code)]
+pub struct ProjectPath(pub(crate) std::path::PathBuf);

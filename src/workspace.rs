@@ -60,3 +60,5 @@ pub fn find_workspace_crates() -> anyhow::Result<Vec<PathBuf>> {
 
     Ok(src_dirs)
 }
+#[allow(dead_code)]
+pub struct CratePath(pub(crate) std::path::PathBuf);

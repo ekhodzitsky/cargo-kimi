@@ -85,3 +85,5 @@ fn run_check(strictness: &str, format: &str) -> anyhow::Result<()> {
 
     Ok(())
 }
+#[allow(dead_code)]
+pub struct DebounceMs(pub(crate) u64);

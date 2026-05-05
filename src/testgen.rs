@@ -468,3 +468,5 @@ mod tests {
         assert_eq!(Op::Mul.wrapping_method(), "wrapping_mul");
     }
 }
+#[allow(dead_code)]
+pub struct TypeName(pub(crate) String);
