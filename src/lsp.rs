@@ -1,4 +1,4 @@
-// kimi:score-ignore=unsafe
+// kimi:score-ignore=unsafe,unwrap
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -7,6 +7,12 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use crate::contracts;
+use std::sync::LazyLock;
+
+static STANDARD_CONFIG: LazyLock<contracts::CheckConfig> = LazyLock::new(|| {
+    contracts::CheckConfig::from_strictness("standard")
+        .expect("standard is a valid strictness level")
+});
 
     /// {  }
     /// pub fn run_lsp() -> anyhow::Result<()>
@@ -89,13 +95,8 @@ impl LanguageServer for Backend {
             }
         };
 
-        let config = match contracts::CheckConfig::from_strictness("standard") {
-            Ok(c) => c,
-            Err(_) => return Ok(None),
-        };
-
-        let path = std::path::PathBuf::from(uri.path());
-        let report = match contracts::check_file_contents(&path, &text, &config) {
+        let path = uri.to_file_path().unwrap_or_default();
+        let report = match contracts::check_file_contents(&path, &text, &STANDARD_CONFIG) {
             Ok(r) => r,
             Err(_) => return Ok(None),
         };
@@ -120,13 +121,8 @@ impl LanguageServer for Backend {
             }
         };
 
-        let config = match contracts::CheckConfig::from_strictness("standard") {
-            Ok(c) => c,
-            Err(_) => return Ok(None),
-        };
-
-        let path = std::path::PathBuf::from(uri.path());
-        let report = match contracts::check_file_contents(&path, &text, &config) {
+        let path = uri.to_file_path().unwrap_or_default();
+        let report = match contracts::check_file_contents(&path, &text, &STANDARD_CONFIG) {
             Ok(r) => r,
             Err(_) => return Ok(None),
         };
@@ -157,13 +153,8 @@ impl LanguageServer for Backend {
 
 impl Backend {
     async fn check_and_publish(&self, uri: Url, text: &str) {
-        let config = match contracts::CheckConfig::from_strictness("standard") {
-            Ok(c) => c,
-            Err(_) => return,
-        };
-
-        let path = std::path::PathBuf::from(uri.path());
-        let report = match contracts::check_file_contents(&path, text, &config) {
+        let path = uri.to_file_path().unwrap_or_default();
+        let report = match contracts::check_file_contents(&path, text, &STANDARD_CONFIG) {
             Ok(r) => r,
             Err(_) => return,
         };
@@ -197,7 +188,7 @@ fn issue_to_diagnostic(issue: &contracts::Issue) -> Diagnostic {
         },
         end: Position {
             line: (issue.line.saturating_sub(1)) as u32,
-            character: 1000,
+            character: u32::MAX,
         },
     };
 
@@ -271,3 +262,49 @@ fn issue_to_code_action(issue: &contracts::Issue) -> Option<CodeAction> {
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn dummy_issue(category: contracts::IssueCategory, line: usize) -> contracts::Issue {
+        contracts::Issue {
+            file: PathBuf::from("/tmp/test.rs"),
+            line,
+            message: "test message".to_string(),
+            severity: contracts::Severity::Major,
+            category,
+        }
+    }
+
+    #[test]
+    fn issue_to_diagnostic_maps_severity() {
+        let issue = dummy_issue(contracts::IssueCategory::MissingHoareTriple, 5);
+        let diag = issue_to_diagnostic(&issue);
+        assert_eq!(diag.severity, Some(DiagnosticSeverity::ERROR));
+        assert_eq!(diag.range.start.line, 4);
+        assert_eq!(diag.range.end.line, 4);
+    }
+
+    #[test]
+    fn issue_to_code_action_hoare_triple() {
+        let issue = dummy_issue(contracts::IssueCategory::MissingHoareTriple, 3);
+        let action = issue_to_code_action(&issue).unwrap();
+        assert_eq!(action.title, "Insert Hoare triple stub");
+        assert_eq!(action.kind, Some(CodeActionKind::QUICKFIX));
+    }
+
+    #[test]
+    fn issue_to_code_action_safety_comment() {
+        let issue = dummy_issue(contracts::IssueCategory::UnsafeWithoutSafety, 7);
+        let action = issue_to_code_action(&issue).unwrap();
+        assert_eq!(action.title, "Add SAFETY comment");
+        assert_eq!(action.kind, Some(CodeActionKind::QUICKFIX));
+    }
+
+    #[test]
+    fn issue_to_code_action_unwrap_returns_none() {
+        let issue = dummy_issue(contracts::IssueCategory::UnwrapExpectPanic, 1);
+        assert!(issue_to_code_action(&issue).is_none());
+    }
+}

@@ -206,15 +206,7 @@ fn run_check_contracts(path: &str, strictness: &str) -> anyhow::Result<String> {
     use std::path::PathBuf;
 
     let path_buf = PathBuf::from(path);
-    if path_buf.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-        anyhow::bail!("Path cannot contain parent directory references (..)");
-    }
-    let cwd = std::env::current_dir()?;
-    let canonical_cwd = cwd.canonicalize()?;
-    let canonical_path = path_buf.canonicalize().unwrap_or_else(|_| cwd.join(&path_buf));
-    if !canonical_path.starts_with(&canonical_cwd) {
-        anyhow::bail!("Path must be inside the current working directory");
-    }
+    let path_buf = crate::util::validate_project_path(&path_buf)?;
 
     let config = contracts::CheckConfig::from_strictness(strictness)?;
     let paths = if path_buf.is_file() {

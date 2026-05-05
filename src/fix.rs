@@ -344,6 +344,62 @@ fn apply_fixes(content: &str, fixes: &[Fix]) -> String {
     result
 }
 
+
+fn print_diff(old: &str, new: &str) {
+    let old_lines: Vec<&str> = old.lines().collect();
+    let new_lines: Vec<&str> = new.lines().collect();
+
+    let mut i = 0usize;
+    let mut j = 0usize;
+
+    while i < old_lines.len() || j < new_lines.len() {
+        if i < old_lines.len()
+            && j < new_lines.len()
+            && old_lines[i] == new_lines[j]
+        {
+            println!(" {}", old_lines[i]);
+            i += 1;
+            j += 1;
+        } else {
+            let mut found = false;
+            for offset in 1..=5 {
+                if i + offset < old_lines.len()
+                    && j < new_lines.len()
+                    && old_lines[i + offset] == new_lines[j]
+                {
+                    for k in 0..offset {
+                        println!("-{}", old_lines[i + k]);
+                    }
+                    i += offset;
+                    found = true;
+                    break;
+                }
+                if i < old_lines.len()
+                    && j + offset < new_lines.len()
+                    && old_lines[i] == new_lines[j + offset]
+                {
+                    for k in 0..offset {
+                        println!("+{}", new_lines[j + k]);
+                    }
+                    j += offset;
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                if i < old_lines.len() {
+                    println!("-{}", old_lines[i]);
+                    i += 1;
+                }
+                if j < new_lines.len() {
+                    println!("+{}", new_lines[j]);
+                    j += 1;
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -489,61 +545,6 @@ mod tests {
                 assert_eq!(text, "    // SAFETY: TODO: explain why this is safe");
             }
             _ => panic!("expected InsertBefore fix"),
-        }
-    }
-}
-
-fn print_diff(old: &str, new: &str) {
-    let old_lines: Vec<&str> = old.lines().collect();
-    let new_lines: Vec<&str> = new.lines().collect();
-
-    let mut i = 0usize;
-    let mut j = 0usize;
-
-    while i < old_lines.len() || j < new_lines.len() {
-        if i < old_lines.len()
-            && j < new_lines.len()
-            && old_lines[i] == new_lines[j]
-        {
-            println!(" {}", old_lines[i]);
-            i += 1;
-            j += 1;
-        } else {
-            let mut found = false;
-            for offset in 1..=5 {
-                if i + offset < old_lines.len()
-                    && j < new_lines.len()
-                    && old_lines[i + offset] == new_lines[j]
-                {
-                    for k in 0..offset {
-                        println!("-{}", old_lines[i + k]);
-                    }
-                    i += offset;
-                    found = true;
-                    break;
-                }
-                if i < old_lines.len()
-                    && j + offset < new_lines.len()
-                    && old_lines[i] == new_lines[j + offset]
-                {
-                    for k in 0..offset {
-                        println!("+{}", new_lines[j + k]);
-                    }
-                    j += offset;
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                if i < old_lines.len() {
-                    println!("-{}", old_lines[i]);
-                    i += 1;
-                }
-                if j < new_lines.len() {
-                    println!("+{}", new_lines[j]);
-                    j += 1;
-                }
-            }
         }
     }
 }

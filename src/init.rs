@@ -62,12 +62,11 @@ pub fn cmd_init(
         if let Some(parts_dir) = Path::new(target_path).parent() {
             let parts_dir = parts_dir.join("parts");
             fs::create_dir_all(&parts_dir)?;
-            if let Ok(parts) = split_agents_into_parts(agents) {
-                for (name, content) in parts {
-                    let part_path = parts_dir.join(format!("{}.md", name));
-                    fs::write(&part_path, content)?;
-                    println!("  ✓ Created part {}", part_path.display());
-                }
+            let parts = split_agents_into_parts(agents)?;
+            for (name, content) in parts {
+                let part_path = parts_dir.join(format!("{}.md", name));
+                fs::write(&part_path, content)?;
+                println!("  ✓ Created part {}", part_path.display());
             }
         }
     }

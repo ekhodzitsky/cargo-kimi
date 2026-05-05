@@ -126,7 +126,7 @@ fn check_sarif_output_is_valid() {
     let stdout = String::from_utf8(output.get_output().stdout.clone()).unwrap();
     let data: serde_json::Value = serde_json::from_str(&stdout).expect("Invalid SARIF output");
     assert_eq!(data["version"], "2.1.0");
-    assert!(data["runs"].as_array().unwrap().len() > 0);
+    assert!(!data["runs"].as_array().unwrap().is_empty());
 }
 
 #[test]

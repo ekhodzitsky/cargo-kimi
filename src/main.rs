@@ -9,6 +9,7 @@ mod mcp;
 mod skills;
 mod testgen;
 mod trend;
+mod util;
 mod watch;
 mod workspace;
 
@@ -35,13 +36,7 @@ fn cmd_check(strictness: &str, format: &str) -> anyhow::Result<()> {
         let json = serde_json::to_string_pretty(&reports)?;
         println!("{}", json);
         // Skip clippy/test and history when emitting JSON — output must be pure JSON
-        let has_critical = reports.iter().any(|r| {
-            r.issues.iter().any(|i| {
-                i.severity == contracts::Severity::Critical
-                    && !contracts::is_exempt(i, &r.exemptions)
-            })
-        });
-        if has_critical {
+        if contracts::has_critical_unexempted(&reports) {
             anyhow::bail!("Contract check failed: critical issues found");
         }
         return Ok(());
@@ -50,13 +45,7 @@ fn cmd_check(strictness: &str, format: &str) -> anyhow::Result<()> {
     if format == "sarif" {
         contracts::print_sarif(&reports)?;
         // Skip clippy/test when emitting SARIF — output must be pure SARIF
-        let has_critical = reports.iter().any(|r| {
-            r.issues.iter().any(|i| {
-                i.severity == contracts::Severity::Critical
-                    && !contracts::is_exempt(i, &r.exemptions)
-            })
-        });
-        if has_critical {
+        if contracts::has_critical_unexempted(&reports) {
             anyhow::bail!("Contract check failed: critical issues found");
         }
         return Ok(());
@@ -70,13 +59,7 @@ fn cmd_check(strictness: &str, format: &str) -> anyhow::Result<()> {
         eprintln!("⚠ Failed to append score history: {}", e);
     }
 
-    let has_critical = reports.iter().any(|r| {
-        r.issues.iter().any(|i| {
-            i.severity == contracts::Severity::Critical
-                && !contracts::is_exempt(i, &r.exemptions)
-        })
-    });
-    if has_critical {
+    if contracts::has_critical_unexempted(&reports) {
         anyhow::bail!("❌ Contract check failed: critical issues found");
     }
 
@@ -158,27 +141,7 @@ fn cmd_generate_tests(output: Option<&str>) -> anyhow::Result<()> {
     let src = Path::new("src");
     let out = output.map(Path::new);
     if let Some(p) = out {
-        if p.components()
-            .any(|c| matches!(c, std::path::Component::ParentDir))
-        {
-            anyhow::bail!("Output path cannot contain parent directory references (..)");
-        }
-        let cwd = std::env::current_dir()?.canonicalize()?;
-        let abs_path = if p.is_absolute() {
-            p.to_path_buf()
-        } else {
-            cwd.join(p)
-        };
-        let mut normalized = std::path::PathBuf::new();
-        for comp in abs_path.components() {
-            match comp {
-                std::path::Component::CurDir => {}
-                _ => normalized.push(comp),
-            }
-        }
-        if !normalized.starts_with(&cwd) {
-            anyhow::bail!("Output path must be inside the project directory");
-        }
+        util::validate_project_path(p)?;
     }
     testgen::write_tests(src, out)
 }

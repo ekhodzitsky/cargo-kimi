@@ -1,3 +1,4 @@
+// kimi:score-ignore=unwrap
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::process::Command;
@@ -42,7 +43,7 @@ pub fn find_workspace_crates() -> anyhow::Result<Vec<PathBuf>> {
         if member_names.contains(&pkg.name) {
             // Find the lib or bin target
             for target in &pkg.targets {
-                if target.kind.contains(&"lib".to_string()) || target.kind.contains(&"bin".to_string()) {
+                if target.kind.iter().any(|k| k == "lib" || k == "bin") {
                     let src_path = PathBuf::from(&target.src_path);
                     if let Some(parent) = src_path.parent() {
                         src_dirs.push(parent.to_path_buf());

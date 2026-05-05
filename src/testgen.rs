@@ -385,6 +385,53 @@ pub fn generate_tests(test_cases: &[TestCase]) -> String {
     output
 }
 
+
+    /// { src_dir exists and is writable }
+    /// pub fn write_tests(src_dir: &Path, output_path: Option<&Path>) -> anyhow::Result<()>
+    /// { writes generated property tests to output_path or src_dir/kimi_property_tests.rs }
+pub fn write_tests(src_dir: &Path, output_path: Option<&Path>) -> anyhow::Result<()> {
+    let test_cases = scan_project(src_dir)?;
+
+    if test_cases.is_empty() {
+        println!("⚠ No newtypes with traits found. Nothing to generate.");
+        return Ok(());
+    }
+
+    println!("Found {} type(s):", test_cases.len());
+    for case in &test_cases {
+        let mut parts = Vec::new();
+        for op in &case.traits.ops {
+            parts.push(op.as_str().to_string());
+        }
+        if case.traits.has_ord { parts.push("Ord".to_string()); }
+        if case.traits.has_eq { parts.push("Eq".to_string()); }
+        if case.traits.has_clone { parts.push("Clone".to_string()); }
+        println!("  {}: {}", case.type_name, parts.join(", "));
+    }
+
+    let generated = generate_tests(&test_cases);
+
+    let target = match output_path {
+        Some(p) => crate::util::validate_project_path(p)?,
+        None => src_dir.join("kimi_property_tests.rs"),
+    };
+
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    std::fs::write(&target, generated)?;
+    println!("✓ Generated property tests: {}", target.display());
+    println!("\nNext steps:");
+    println!("  1. Add to your src/lib.rs or src/main.rs:");
+    println!("     #[cfg(test)]");
+    println!("     mod kimi_property_tests;");
+    println!("  2. Add proptest to [dev-dependencies] in Cargo.toml:");
+    println!("     proptest = \"1.0\"");
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -420,67 +467,4 @@ mod tests {
         assert_eq!(Op::Sub.wrapping_method(), "wrapping_sub");
         assert_eq!(Op::Mul.wrapping_method(), "wrapping_mul");
     }
-}
-
-    /// { src_dir exists and is writable }
-    /// pub fn write_tests(src_dir: &Path, output_path: Option<&Path>) -> anyhow::Result<()>
-    /// { writes generated property tests to output_path or src_dir/kimi_property_tests.rs }
-pub fn write_tests(src_dir: &Path, output_path: Option<&Path>) -> anyhow::Result<()> {
-    let test_cases = scan_project(src_dir)?;
-
-    if test_cases.is_empty() {
-        println!("⚠ No newtypes with traits found. Nothing to generate.");
-        return Ok(());
-    }
-
-    println!("Found {} type(s):", test_cases.len());
-    for case in &test_cases {
-        let mut parts = Vec::new();
-        for op in &case.traits.ops {
-            parts.push(op.as_str().to_string());
-        }
-        if case.traits.has_ord { parts.push("Ord".to_string()); }
-        if case.traits.has_eq { parts.push("Eq".to_string()); }
-        if case.traits.has_clone { parts.push("Clone".to_string()); }
-        println!("  {}: {}", case.type_name, parts.join(", "));
-    }
-
-    let generated = generate_tests(&test_cases);
-
-    let target = match output_path {
-        Some(p) => p.to_path_buf(),
-        None => src_dir.join("kimi_property_tests.rs"),
-    };
-
-    // Validate output path doesn't escape project root
-    if target.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-        anyhow::bail!("Output path cannot contain parent directory references (..)");
-    }
-    let cwd = std::env::current_dir()?.canonicalize()?;
-    let abs_target = if target.is_absolute() { target.clone() } else { cwd.join(&target) };
-    let mut normalized = std::path::PathBuf::new();
-    for comp in abs_target.components() {
-        match comp {
-            std::path::Component::CurDir => {}
-            _ => normalized.push(comp),
-        }
-    }
-    if !normalized.starts_with(&cwd) {
-        anyhow::bail!("Output path must be inside the project directory");
-    }
-
-    if let Some(parent) = target.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-
-    std::fs::write(&target, generated)?;
-    println!("✓ Generated property tests: {}", target.display());
-    println!("\nNext steps:");
-    println!("  1. Add to your src/lib.rs or src/main.rs:");
-    println!("     #[cfg(test)]");
-    println!("     mod kimi_property_tests;");
-    println!("  2. Add proptest to [dev-dependencies] in Cargo.toml:");
-    println!("     proptest = \"1.0\"");
-
-    Ok(())
 }

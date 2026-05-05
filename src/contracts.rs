@@ -28,7 +28,7 @@ impl Severity {
     /// pub fn from_str(s: &str) -> Option<Self>
     /// { result == Some(sev) iff s matches a known severity }
     #[allow(dead_code)]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn from_name(s: &str) -> Option<Self> {
         match s {
             "CRITICAL" => Some(Severity::Critical),
             "MAJOR" => Some(Severity::Major),
@@ -291,7 +291,7 @@ pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> 
     // Filter by strictness
     issues.retain(|issue| config.strictness.contains(&issue.severity));
 
-    let score = compute_score(content, &issues, &exemptions);
+    let score = compute_score(&lines, content, &issues, &exemptions);
 
     Ok(FileReport {
         file: path.to_path_buf(),
@@ -301,7 +301,7 @@ pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> 
     })
 }
 
-fn compute_score(content: &str, issues: &[Issue], exemptions: &HashSet<String>) -> u32 {
+fn compute_score(lines: &[&str], content: &str, issues: &[Issue], exemptions: &HashSet<String>) -> u32 {
     let mut score = 100u32;
 
     // Hoare triples: 30 pts (binary — all pub fn must have triples)
@@ -321,9 +321,9 @@ fn compute_score(content: &str, issues: &[Issue], exemptions: &HashSet<String>) 
     }
 
     // Newtype: 10 pts (tuple struct with single field, e.g. `pub struct Foo(Bar)`)
-    let has_newtype = content.lines().any(|l| {
+    let has_newtype = lines.iter().any(|l| {
         let t = l.trim();
-        t.starts_with("pub struct ") && t.contains('(') && !t.contains("{")
+        t.starts_with("pub struct ") && t.contains('(') && !t.contains('{')
     });
     if !has_newtype {
         score = score.saturating_sub(10);
@@ -341,7 +341,6 @@ fn compute_score(content: &str, issues: &[Issue], exemptions: &HashSet<String>) 
     }
 
     // Avg function length ≤40 lines: 10 pts
-    let lines: Vec<&str> = content.lines().collect();
     let mut fn_lengths = Vec::new();
     let mut in_fn = false;
     let mut brace_depth = 0i32;
@@ -416,174 +415,15 @@ pub fn is_exempt(issue: &Issue, exemptions: &HashSet<String>) -> bool {
     false
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashSet;
-
-    #[test]
-    fn check_config_from_strictness_relaxed() {
-        let cfg = CheckConfig::from_strictness("relaxed").unwrap();
-        assert!(cfg.strictness.contains(&Severity::Critical));
-        assert_eq!(cfg.strictness.len(), 1);
-    }
-
-    #[test]
-    fn check_config_from_strictness_standard() {
-        let cfg = CheckConfig::from_strictness("standard").unwrap();
-        assert!(cfg.strictness.contains(&Severity::Critical));
-        assert!(cfg.strictness.contains(&Severity::Major));
-        assert_eq!(cfg.strictness.len(), 2);
-    }
-
-    #[test]
-    fn check_config_from_strictness_strict() {
-        let cfg = CheckConfig::from_strictness("strict").unwrap();
-        assert!(cfg.strictness.contains(&Severity::Critical));
-        assert!(cfg.strictness.contains(&Severity::Major));
-        assert!(cfg.strictness.contains(&Severity::Minor));
-        assert!(cfg.strictness.contains(&Severity::Info));
-        assert_eq!(cfg.strictness.len(), 4);
-    }
-
-    #[test]
-    fn check_config_from_strictness_invalid() {
-        assert!(CheckConfig::from_strictness("invalid").is_err());
-    }
-
-    #[test]
-    fn parse_exemptions_valid_comment() {
-        let content = "// kimi:score-ignore=hoare\nfn foo() {}";
-        let ex = parse_exemptions(content);
-        assert!(ex.contains("hoare"));
-    }
-
-    #[test]
-    fn parse_exemptions_multiple_categories() {
-        let content = "// kimi:score-ignore=hoare, unwrap ,UNSAFE\nfn foo() {}";
-        let ex = parse_exemptions(content);
-        assert!(ex.contains("hoare"));
-        assert!(ex.contains("unwrap"));
-        assert!(ex.contains("unsafe"));
-    }
-
-    #[test]
-    fn parse_exemptions_after_line_10_ignored() {
-        let mut lines: Vec<String> = (0..10).map(|i| format!("line {}", i)).collect();
-        lines.push("// kimi:score-ignore=hoare".to_string());
-        let content = lines.join("\n");
-        let ex = parse_exemptions(&content);
-        assert!(!ex.contains("hoare"));
-    }
-
-    #[test]
-    fn parse_exemptions_no_comment() {
-        let content = "fn foo() {}";
-        let ex = parse_exemptions(content);
-        assert!(ex.is_empty());
-    }
-
-    fn dummy_issue(message: &str, category: IssueCategory) -> Issue {
-        Issue {
-            file: PathBuf::new(),
-            line: 1,
-            message: message.to_string(),
-            severity: Severity::Major,
-            category,
-        }
-    }
-
-    #[test]
-    fn compute_score_perfect_file() {
-        let content = r#"pub struct Foo(Bar);
-use std::marker::PhantomData;
-enum State {}
-impl State {}
-impl From<i32> for State {}
-fn f() -> Result<(), ()> {}
-"#;
-        let issues: Vec<Issue> = vec![];
-        let exemptions = HashSet::new();
-        assert_eq!(compute_score(content, &issues, &exemptions), 100);
-    }
-
-    #[test]
-    fn compute_score_missing_hoare() {
-        let content = r#"pub struct Foo(Bar);
-use std::marker::PhantomData;
-enum State {}
-impl State {}
-impl From<i32> for State {}
-fn f() -> Result<(), ()> {}
-"#;
-        let issues = vec![dummy_issue("pub fn 'foo' missing Hoare triple doc comment", IssueCategory::MissingHoareTriple)];
-        let exemptions = HashSet::new();
-        assert_eq!(compute_score(content, &issues, &exemptions), 70);
-    }
-
-    #[test]
-    fn compute_score_missing_hoare_exempt() {
-        let content = r#"pub struct Foo(Bar);
-use std::marker::PhantomData;
-enum State {}
-impl State {}
-impl From<i32> for State {}
-fn f() -> Result<(), ()> {}
-"#;
-        let issues = vec![dummy_issue("pub fn 'foo' missing Hoare triple doc comment", IssueCategory::MissingHoareTriple)];
-        let mut exemptions = HashSet::new();
-        exemptions.insert("hoare".to_string());
-        assert_eq!(compute_score(content, &issues, &exemptions), 100);
-    }
-
-    #[test]
-    fn compute_score_all_deductions() {
-        let mut lines = vec!["fn long_fn() {"];
-        for i in 1..=50 {
-            lines.push(&*Box::leak(format!("{}", i).into_boxed_str()));
-        }
-        lines.push("}");
-        let content = lines.join("\n");
-        let issues = vec![
-            dummy_issue("pub fn 'foo' missing Hoare triple doc comment", IssueCategory::MissingHoareTriple),
-            dummy_issue("unwrap()/expect()/panic!() found outside tests", IssueCategory::UnwrapExpectPanic),
-        ];
-        let exemptions = HashSet::new();
-        assert_eq!(compute_score(&content, &issues, &exemptions), 0);
-    }
-
-    #[test]
-    fn extract_fn_name_various_signatures() {
-        assert_eq!(extract_fn_name("pub fn foo("), "foo");
-        assert_eq!(extract_fn_name("async fn bar<("), "bar");
-        assert_eq!(extract_fn_name("fn baz("), "baz");
-        assert_eq!(extract_fn_name("pub unsafe fn qux("), "qux");
-    }
-
-    #[test]
-    fn is_exempt_all_categories() {
-        let hoare_issue = dummy_issue("missing Hoare triple", IssueCategory::MissingHoareTriple);
-        let unwrap_issue = dummy_issue("unwrap()/expect()/panic!()", IssueCategory::UnwrapExpectPanic);
-        let unsafe_issue = dummy_issue("unsafe block without", IssueCategory::UnsafeWithoutSafety);
-        let mismatch_issue = dummy_issue("something else", IssueCategory::UnwrapExpectPanic);
-
-        let mut ex = HashSet::new();
-        ex.insert("hoare".to_string());
-        assert!(is_exempt(&hoare_issue, &ex));
-        assert!(!is_exempt(&unwrap_issue, &ex));
-
-        ex.clear();
-        ex.insert("unwrap".to_string());
-        assert!(is_exempt(&unwrap_issue, &ex));
-
-        ex.clear();
-        ex.insert("unsafe".to_string());
-        assert!(is_exempt(&unsafe_issue, &ex));
-
-        ex.clear();
-        ex.insert("hoare".to_string());
-        assert!(!is_exempt(&mismatch_issue, &ex));
-    }
+    /// { reports are valid check results }
+    /// pub fn has_critical_unexempted(reports: &[FileReport]) -> bool
+    /// { true iff any report contains a Critical issue that is not exempt }
+pub fn has_critical_unexempted(reports: &[FileReport]) -> bool {
+    reports.iter().any(|r| {
+        r.issues
+            .iter()
+            .any(|i| i.severity == Severity::Critical && !is_exempt(i, &r.exemptions))
+    })
 }
 
     /// { reports are valid check results }
@@ -787,4 +627,178 @@ pub fn print_reports(reports: &[FileReport]) {
     }
 
     println!("{}", "═══════════════════════════════════════════".dimmed());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn check_config_from_strictness_relaxed() {
+        let cfg = CheckConfig::from_strictness("relaxed").unwrap();
+        assert!(cfg.strictness.contains(&Severity::Critical));
+        assert_eq!(cfg.strictness.len(), 1);
+    }
+
+    #[test]
+    fn check_config_from_strictness_standard() {
+        let cfg = CheckConfig::from_strictness("standard").unwrap();
+        assert!(cfg.strictness.contains(&Severity::Critical));
+        assert!(cfg.strictness.contains(&Severity::Major));
+        assert_eq!(cfg.strictness.len(), 2);
+    }
+
+    #[test]
+    fn check_config_from_strictness_strict() {
+        let cfg = CheckConfig::from_strictness("strict").unwrap();
+        assert!(cfg.strictness.contains(&Severity::Critical));
+        assert!(cfg.strictness.contains(&Severity::Major));
+        assert!(cfg.strictness.contains(&Severity::Minor));
+        assert!(cfg.strictness.contains(&Severity::Info));
+        assert_eq!(cfg.strictness.len(), 4);
+    }
+
+    #[test]
+    fn check_config_from_strictness_invalid() {
+        assert!(CheckConfig::from_strictness("invalid").is_err());
+    }
+
+    #[test]
+    fn parse_exemptions_valid_comment() {
+        let content = "// kimi:score-ignore=hoare\nfn foo() {}";
+        let ex = parse_exemptions(content);
+        assert!(ex.contains("hoare"));
+    }
+
+    #[test]
+    fn parse_exemptions_multiple_categories() {
+        let content = "// kimi:score-ignore=hoare, unwrap ,UNSAFE\nfn foo() {}";
+        let ex = parse_exemptions(content);
+        assert!(ex.contains("hoare"));
+        assert!(ex.contains("unwrap"));
+        assert!(ex.contains("unsafe"));
+    }
+
+    #[test]
+    fn parse_exemptions_after_line_10_ignored() {
+        let mut lines: Vec<String> = (0..10).map(|i| format!("line {}", i)).collect();
+        lines.push("// kimi:score-ignore=hoare".to_string());
+        let content = lines.join("\n");
+        let ex = parse_exemptions(&content);
+        assert!(!ex.contains("hoare"));
+    }
+
+    #[test]
+    fn parse_exemptions_no_comment() {
+        let content = "fn foo() {}";
+        let ex = parse_exemptions(content);
+        assert!(ex.is_empty());
+    }
+
+    fn dummy_issue(message: &str, category: IssueCategory) -> Issue {
+        Issue {
+            file: PathBuf::new(),
+            line: 1,
+            message: message.to_string(),
+            severity: Severity::Major,
+            category,
+        }
+    }
+
+    #[test]
+    fn compute_score_perfect_file() {
+        let content = r#"pub struct Foo(Bar);
+use std::marker::PhantomData;
+enum State {}
+impl State {}
+impl From<i32> for State {}
+fn f() -> Result<(), ()> {}
+"#;
+        let issues: Vec<Issue> = vec![];
+        let exemptions = HashSet::new();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(compute_score(&lines, content, &issues, &exemptions), 100);
+    }
+
+    #[test]
+    fn compute_score_missing_hoare() {
+        let content = r#"pub struct Foo(Bar);
+use std::marker::PhantomData;
+enum State {}
+impl State {}
+impl From<i32> for State {}
+fn f() -> Result<(), ()> {}
+"#;
+        let issues = vec![dummy_issue("pub fn 'foo' missing Hoare triple doc comment", IssueCategory::MissingHoareTriple)];
+        let exemptions = HashSet::new();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(compute_score(&lines, content, &issues, &exemptions), 70);
+    }
+
+    #[test]
+    fn compute_score_missing_hoare_exempt() {
+        let content = r#"pub struct Foo(Bar);
+use std::marker::PhantomData;
+enum State {}
+impl State {}
+impl From<i32> for State {}
+fn f() -> Result<(), ()> {}
+"#;
+        let issues = vec![dummy_issue("pub fn 'foo' missing Hoare triple doc comment", IssueCategory::MissingHoareTriple)];
+        let mut exemptions = HashSet::new();
+        exemptions.insert("hoare".to_string());
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(compute_score(&lines, content, &issues, &exemptions), 100);
+    }
+
+    #[test]
+    fn compute_score_all_deductions() {
+        let mut lines = vec!["fn long_fn() {"];
+        for i in 1..=50 {
+            lines.push(&*Box::leak(format!("{}", i).into_boxed_str()));
+        }
+        lines.push("}");
+        let content = lines.join("\n");
+        let issues = vec![
+            dummy_issue("pub fn 'foo' missing Hoare triple doc comment", IssueCategory::MissingHoareTriple),
+            dummy_issue("unwrap()/expect()/panic!() found outside tests", IssueCategory::UnwrapExpectPanic),
+        ];
+        let exemptions = HashSet::new();
+        let content_lines: Vec<&str> = content.lines().collect();
+        assert_eq!(compute_score(&content_lines, &content, &issues, &exemptions), 0);
+    }
+
+    #[test]
+    fn extract_fn_name_various_signatures() {
+        assert_eq!(extract_fn_name("pub fn foo("), "foo");
+        assert_eq!(extract_fn_name("async fn bar<("), "bar");
+        assert_eq!(extract_fn_name("fn baz("), "baz");
+        assert_eq!(extract_fn_name("pub unsafe fn qux("), "qux");
+    }
+
+    #[test]
+    fn is_exempt_all_categories() {
+        let hoare_issue = dummy_issue("missing Hoare triple", IssueCategory::MissingHoareTriple);
+        let unwrap_issue = dummy_issue("unwrap()/expect()/panic!()", IssueCategory::UnwrapExpectPanic);
+        let unsafe_issue = dummy_issue("unsafe block without", IssueCategory::UnsafeWithoutSafety);
+        let mismatch_issue = dummy_issue("something else", IssueCategory::UnwrapExpectPanic);
+
+        let mut ex = HashSet::new();
+        ex.insert("hoare".to_string());
+        assert!(is_exempt(&hoare_issue, &ex));
+        assert!(!is_exempt(&unwrap_issue, &ex));
+
+        ex.clear();
+        ex.insert("unwrap".to_string());
+        assert!(is_exempt(&unwrap_issue, &ex));
+
+        ex.clear();
+        ex.insert("unsafe".to_string());
+        assert!(is_exempt(&unsafe_issue, &ex));
+
+        ex.clear();
+        ex.insert("hoare".to_string());
+        assert!(!is_exempt(&mismatch_issue, &ex));
+    }
 }

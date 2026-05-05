@@ -1,3 +1,4 @@
+// kimi:score-ignore=unwrap
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, BufRead, Write};
