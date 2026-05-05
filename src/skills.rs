@@ -48,6 +48,12 @@ impl SkillName {
         {
             anyhow::bail!("Skill name must match ^[a-z0-9-]+$");
         }
+        if name.starts_with('-') || name.ends_with('-') {
+            anyhow::bail!("Skill name must not start or end with a hyphen");
+        }
+        if name.contains("--") {
+            anyhow::bail!("Skill name must not contain consecutive hyphens");
+        }
         Ok(Self(name.to_string()))
     }
 

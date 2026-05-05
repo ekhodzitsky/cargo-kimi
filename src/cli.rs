@@ -32,7 +32,7 @@ pub enum Commands {
         /// Strictness level for contract checker
         #[arg(short, long, value_name = "LEVEL", default_value = "standard")]
         strictness: String,
-        /// Output format (text or json)
+        /// Output format (text, json, or sarif)
         #[arg(short, long, value_name = "FORMAT", default_value = "text")]
         format: String,
     },
@@ -137,5 +137,3 @@ pub fn run() -> anyhow::Result<()> {
         Commands::Lsp => crate::lsp::run_lsp(),
     }
 }
-#[allow(dead_code)]
-pub struct CommandName(pub(crate) String);

@@ -829,9 +829,10 @@ fn f() -> Result<(), ()> {}
 
     #[test]
     fn compute_score_all_deductions() {
-        let mut lines = vec!["fn long_fn() {"];
-        for i in 1..=50 {
-            lines.push(&*Box::leak(format!("{}", i).into_boxed_str()));
+        let numbered: Vec<String> = (1..=50).map(|i| format!("{}", i)).collect();
+        let mut lines: Vec<&str> = vec!["fn long_fn() {"];
+        for s in &numbered {
+            lines.push(s.as_str());
         }
         lines.push("}");
         let content = lines.join("\n");

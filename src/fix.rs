@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 
 static FN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(pub\s+)?(async\s+)?(unsafe\s+)?fn\s+").unwrap());
 static UNWRAP_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\.unwrap\(\)").unwrap());
-static EXPECT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"\.expect\("([^"]*)"\)"#).unwrap());
+static EXPECT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"\.expect\("((?:[^"\\]|\\.)*)"\)"#).unwrap());
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]

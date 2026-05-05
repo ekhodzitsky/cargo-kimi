@@ -294,5 +294,3 @@ pub fn run_server() -> anyhow::Result<()> {
 
     Ok(())
 }
-#[allow(dead_code)]
-pub struct McpMethod(pub(crate) String);

@@ -1,3 +1,4 @@
+use anyhow::Context;
 use serde::Deserialize;
 use std::path::Path;
 
@@ -15,7 +16,8 @@ pub fn load_config(path: Option<&Path>) -> anyhow::Result<KimiConfig> {
         return Ok(KimiConfig::default());
     };
 
-    let content = std::fs::read_to_string(&config_path)?;
+    let content = std::fs::read_to_string(&config_path)
+        .with_context(|| format!("failed to read config from {}", config_path.display()))?;
     let config: KimiConfig = toml::from_str(&content)?;
     Ok(config)
 }

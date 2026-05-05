@@ -175,10 +175,27 @@ pub fn scan_project(src_dir: &Path) -> anyhow::Result<Vec<TestCase>> {
                 }
             };
             let mut pending_derive: Option<String> = None;
+            let mut accumulating_derive: Option<String> = None;
             for line in content.lines() {
                 let trimmed = line.trim();
-                if trimmed.starts_with("#[derive(") {
-                    pending_derive = Some(trimmed.to_string());
+
+                // Continue accumulating a multi-line derive
+                if let Some(ref mut acc) = accumulating_derive {
+                    acc.push(' ');
+                    acc.push_str(trimmed);
+                    if trimmed.contains(")]") {
+                        pending_derive = accumulating_derive.take();
+                        // fall through to check for struct on this line
+                    } else {
+                        continue;
+                    }
+                } else if trimmed.starts_with("#[derive(") {
+                    if trimmed.contains(")]") {
+                        pending_derive = Some(trimmed.to_string());
+                    } else {
+                        // Start accumulating a multi-line derive
+                        accumulating_derive = Some(trimmed.to_string());
+                    }
                     continue;
                 }
                 if let Some(cap) = STRUCT_RE.captures(line) {

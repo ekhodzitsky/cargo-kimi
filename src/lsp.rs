@@ -101,7 +101,12 @@ impl LanguageServer for Backend {
         };
         let report = match contracts::check_file_contents(&path, &text, &STANDARD_CONFIG) {
             Ok(r) => r,
-            Err(_) => return Ok(None),
+            Err(e) => {
+                self.client
+                    .log_message(MessageType::WARNING, format!("check failed: {}", e))
+                    .await;
+                return Ok(None);
+            }
         };
 
         let mut actions = Vec::new();
@@ -130,7 +135,12 @@ impl LanguageServer for Backend {
         };
         let report = match contracts::check_file_contents(&path, &text, &STANDARD_CONFIG) {
             Ok(r) => r,
-            Err(_) => return Ok(None),
+            Err(e) => {
+                self.client
+                    .log_message(MessageType::WARNING, format!("check failed: {}", e))
+                    .await;
+                return Ok(None);
+            }
         };
 
         let score = report.score;
@@ -165,7 +175,12 @@ impl Backend {
         };
         let report = match contracts::check_file_contents(&path, text, &STANDARD_CONFIG) {
             Ok(r) => r,
-            Err(_) => return,
+            Err(e) => {
+                self.client
+                    .log_message(MessageType::WARNING, format!("check failed: {}", e))
+                    .await;
+                return;
+            }
         };
 
         let diagnostics: Vec<Diagnostic> = report.issues.iter().map(issue_to_diagnostic).collect();
@@ -325,5 +340,3 @@ mod tests {
         assert!(issue_to_code_action(&issue).is_none());
     }
 }
-#[allow(dead_code)]
-pub struct LspUri(pub(crate) String);

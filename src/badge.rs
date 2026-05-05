@@ -5,7 +5,7 @@ pub struct BadgeScore(u32);
 impl BadgeScore {
 #[allow(dead_code)]
     pub(crate) fn new(value: u32) -> Self {
-        Self(value)
+        Self(value.min(100))
     }
 
     pub(crate) fn get(self) -> u32 {
