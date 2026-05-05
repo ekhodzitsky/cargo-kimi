@@ -164,6 +164,31 @@ cargo kimi mcp
 
 Exposes the `check_contracts` tool natively — no shell execution required.
 
+### `cargo kimi lsp`
+
+Start an LSP server for real-time diagnostics and code actions in any editor.
+
+```bash
+cargo kimi lsp
+```
+
+**Features:**
+- **Diagnostics** — contract issues inline while you type (with debounce on save)
+- **Code Actions** — quick fixes: "Insert Hoare triple", "Add SAFETY comment"
+- **Hover** — file score and issue count on hover
+
+**Neovim example (via lspconfig):**
+
+```lua
+require('lspconfig').cargo_kimi.setup {
+  cmd = { 'cargo', 'kimi', 'lsp' },
+  filetypes = { 'rust' },
+  root_dir = require('lspconfig.util').root_pattern('Cargo.toml'),
+}
+```
+
+**VS Code:** Use the generic LSP client extension (e.g., `generic-lsp`) pointed at `cargo kimi lsp`.
+
 ---
 
 ## Configuration

@@ -92,8 +92,13 @@ pub enum Commands {
         #[arg(short, long, default_value_t = 500)]
         debounce_ms: u64,
     },
+    /// Start LSP server for editor integration
+    Lsp,
 }
 
+    /// { std::env::args() contains valid UTF-8 strings }
+    /// pub fn run() -> anyhow::Result<()>
+    /// { result is Ok if a valid command is parsed and executed, Err if parsing or execution fails }
 pub fn run() -> anyhow::Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
     // When invoked as `cargo kimi`, cargo passes `kimi` as the first argument.
@@ -129,5 +134,6 @@ pub fn run() -> anyhow::Result<()> {
             debounce_ms,
         } => crate::watch::run_watch(&strictness, &format, debounce_ms),
         Commands::Badge { output, strictness } => crate::cmd_badge(&output, &strictness),
+        Commands::Lsp => crate::lsp::run_lsp(),
     }
 }

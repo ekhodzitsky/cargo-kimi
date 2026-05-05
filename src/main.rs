@@ -4,6 +4,7 @@ mod config;
 mod contracts;
 mod fix;
 mod init;
+mod lsp;
 mod mcp;
 mod skills;
 mod testgen;

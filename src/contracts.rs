@@ -164,8 +164,10 @@ fn parse_exemptions(content: &str) -> HashSet<String> {
     }
     exempt
 }
-
-fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> anyhow::Result<FileReport> {
+    /// { path is a valid file path, text is valid UTF-8 content, config matches a known strictness level }
+    /// pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> anyhow::Result<FileReport>
+    /// { result.is_ok() && result.as_ref().unwrap().issues are filtered by config.strictness }
+pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> anyhow::Result<FileReport> {
     let lines: Vec<&str> = content.lines().collect();
     let exemptions = parse_exemptions(content);
 
