@@ -6,6 +6,7 @@ mod mcp;
 mod skills;
 mod testgen;
 mod trend;
+mod watch;
 mod workspace;
 
 use std::path::Path;
@@ -27,6 +28,21 @@ fn cmd_check(strictness: &str, format: &str) -> anyhow::Result<()> {
         let json = serde_json::to_string_pretty(&reports)?;
         println!("{}", json);
         // Skip clippy/test and history when emitting JSON — output must be pure JSON
+        let has_critical = reports.iter().any(|r| {
+            r.issues.iter().any(|i| {
+                i.severity == contracts::Severity::Critical
+                    && !contracts::is_exempt(i, &r.exemptions)
+            })
+        });
+        if has_critical {
+            anyhow::bail!("Contract check failed: critical issues found");
+        }
+        return Ok(());
+    }
+
+    if format == "sarif" {
+        contracts::print_sarif(&reports)?;
+        // Skip clippy/test when emitting SARIF — output must be pure SARIF
         let has_critical = reports.iter().any(|r| {
             r.issues.iter().any(|i| {
                 i.severity == contracts::Severity::Critical

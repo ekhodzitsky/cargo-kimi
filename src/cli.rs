@@ -70,6 +70,18 @@ pub enum Commands {
         #[arg(short, long, value_name = "LEVEL", default_value = "standard")]
         strictness: String,
     },
+    /// Watch source files and re-run checks on change
+    Watch {
+        /// Strictness level for contract checker
+        #[arg(short, long, value_name = "LEVEL", default_value = "standard")]
+        strictness: String,
+        /// Output format (text, json, or sarif)
+        #[arg(short, long, value_name = "FORMAT", default_value = "text")]
+        format: String,
+        /// Debounce interval in milliseconds
+        #[arg(short, long, default_value_t = 500)]
+        debounce_ms: u64,
+    },
 }
 
 pub fn run() -> anyhow::Result<()> {
@@ -101,5 +113,10 @@ pub fn run() -> anyhow::Result<()> {
         Commands::Mcp => crate::mcp::run_server(),
         Commands::Trend { days } => crate::trend::show_trend(days),
         Commands::Fix { dry_run, strictness } => crate::fix::run_fix(dry_run, &strictness),
+        Commands::Watch {
+            strictness,
+            format,
+            debounce_ms,
+        } => crate::watch::run_watch(&strictness, &format, debounce_ms),
     }
 }

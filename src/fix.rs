@@ -478,6 +478,19 @@ mod tests {
         let m = UNWRAP_RE.find(line).unwrap();
         assert!(!is_chained_unwrap(line, &m));
     }
+
+    #[test]
+    fn fix_missing_safety_inserts_comment() {
+        let lines = vec!["    unsafe {"];
+        let fix = fix_missing_safety(&lines, 0).unwrap();
+        match fix {
+            Fix::InsertBefore { line, text } => {
+                assert_eq!(line, 1);
+                assert_eq!(text, "    // SAFETY: TODO: explain why this is safe");
+            }
+            _ => panic!("expected InsertBefore fix"),
+        }
+    }
 }
 
 fn print_diff(old: &str, new: &str) {

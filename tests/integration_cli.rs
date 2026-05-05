@@ -12,7 +12,8 @@ fn cli_help_shows_all_commands() {
         .stdout(contains("check"))
         .stdout(contains("fix"))
         .stdout(contains("trend"))
-        .stdout(contains("mcp"));
+        .stdout(contains("mcp"))
+        .stdout(contains("watch"));
 }
 
 #[test]
@@ -111,6 +112,30 @@ fn upgrade_shows_instructions() {
     cmd.assert()
         .success()
         .stdout(contains("cargo install"));
+}
+
+#[test]
+fn check_sarif_output_is_valid() {
+    let mut cmd = Command::cargo_bin("cargo-kimi").unwrap();
+    cmd.arg("check")
+        .arg("--strictness")
+        .arg("standard")
+        .arg("--format")
+        .arg("sarif");
+    let output = cmd.assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).unwrap();
+    let data: serde_json::Value = serde_json::from_str(&stdout).expect("Invalid SARIF output");
+    assert_eq!(data["version"], "2.1.0");
+    assert!(data["runs"].as_array().unwrap().len() > 0);
+}
+
+#[test]
+fn watch_help_shows_debounce_option() {
+    let mut cmd = Command::cargo_bin("cargo-kimi").unwrap();
+    cmd.arg("watch").arg("--help");
+    cmd.assert()
+        .success()
+        .stdout(contains("--debounce-ms"));
 }
 
 #[test]

@@ -6,27 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [1.6.4] - 2026-05-05
 
-### Fixed
+### Added
 
-- **CI**: Removed `--locked` from `cargo test` in release workflow (lock file compatibility)
-
-## [1.6.3] - 2026-05-05
-
-### Fixed
-
-- **CI**: Actually committed `Cargo.lock` (removed from root `.gitignore`)
-
-## [1.6.2] - 2026-05-05
+- **`cargo kimi watch`**: Continuous file-system watching mode that re-runs contract checks on every `.rs` save
+- **`--format sarif`**: SARIF output for native GitHub Code Scanning integration
+- **Auto-fix `unsafe` blocks**: `cargo kimi fix` now inserts `// SAFETY: TODO` stubs before unannotated `unsafe` blocks
 
 ### Fixed
 
-- **CI**: Committed `Cargo.lock` so `--locked` builds work in release workflow
-
-## [1.6.1] - 2026-05-05
-
-### Fixed
-
-- **CI**: Corrected `dtolnay/rust-action` → `dtolnay/rust-toolchain` in all GitHub Actions workflows
+- **CI release workflow**: Removed `--locked` from cross-compilation build steps (stale lockfile failures)
+- **CI publish dry-run**: Added `--allow-dirty` so `Cargo.lock` refresh does not block the dry-run
+- **CI**: `dtolnay/rust-action` → `dtolnay/rust-toolchain@stable`
+- **CI**: Committed `Cargo.lock` and removed it from `.gitignore` for reproducible binary builds
+- **CI**: Corrected release artifact paths (`cargo-kimi/target/` → `target/` after `working-directory` fix)
 
 ## [1.6.0] - 2026-05-05
 

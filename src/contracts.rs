@@ -583,6 +583,71 @@ fn f() -> Result<(), ()> {}
 }
 
     /// { reports are valid check results }
+    /// pub fn print_sarif(reports: &[FileReport]) -> anyhow::Result<()>
+    /// { prints SARIF 2.1.0 JSON to stdout }
+pub fn print_sarif(reports: &[FileReport]) -> anyhow::Result<()> {
+    use serde_json::json;
+
+    let mut results = Vec::new();
+    let mut rules = std::collections::HashMap::new();
+
+    for report in reports {
+        for issue in &report.issues {
+            let rule_id = match issue.category {
+                IssueCategory::MissingHoareTriple => "kimi/missing-hoare-triple",
+                IssueCategory::UnwrapExpectPanic => "kimi/unwrap-expect-panic",
+                IssueCategory::UnsafeWithoutSafety => "kimi/unsafe-without-safety",
+            };
+            let level = match issue.severity {
+                Severity::Critical | Severity::Major => "error",
+                Severity::Minor => "warning",
+                Severity::Info => "note",
+            };
+
+            rules.insert(rule_id, json!({
+                "id": rule_id,
+                "name": rule_id,
+                "shortDescription": { "text": issue.message.clone() },
+            }));
+
+            results.push(json!({
+                "ruleId": rule_id,
+                "level": level,
+                "message": { "text": issue.message.clone() },
+                "locations": [{
+                    "physicalLocation": {
+                        "artifactLocation": {
+                            "uri": report.file.to_string_lossy(),
+                        },
+                        "region": {
+                            "startLine": issue.line,
+                        }
+                    }
+                }]
+            }));
+        }
+    }
+
+    let sarif = json!({
+        "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {
+                "driver": {
+                    "name": "cargo-kimi",
+                    "informationalUri": "https://github.com/ekhodzitsky/kimi-dotfiles",
+                    "rules": rules.values().collect::<Vec<_>>(),
+                }
+            },
+            "results": results,
+        }]
+    });
+
+    println!("{}", serde_json::to_string_pretty(&sarif)?);
+    Ok(())
+}
+
+    /// { reports are valid check results }
     /// pub fn print_reports(reports: &[FileReport])
     /// { prints per-file issues, scores, and project average to stdout }
 pub fn print_reports(reports: &[FileReport]) {
