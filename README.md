@@ -1,185 +1,173 @@
 # cargo-kimi
 
 [![crates.io](https://img.shields.io/crates/v/cargo-kimi)](https://crates.io/crates/cargo-kimi)
+[![docs.rs](https://docs.rs/cargo-kimi/badge.svg)](https://docs.rs/cargo-kimi)
 [![CI](https://github.com/ekhodzitsky/cargo-kimi/actions/workflows/dogfood.yml/badge.svg)](https://github.com/ekhodzitsky/cargo-kimi/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust: 1.80+](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://rustup.rs)
 
-Cargo subcommand for [kimi-guidelines](https://github.com/ekhodzitsky/kimi-guidelines) — structured contracts for Rust.
+> **Mechanized contracts for Rust. Make AI-generated code reviewable by humans in 30 seconds.**
 
-> **Making AI-generated code reviewable by humans in 30 seconds.**
+`cargo-kimi` is a [cargo subcommand](https://doc.rust-lang.org/cargo/reference/external-tools.html#custom-subcommands) that scores every Rust file **0–100** on contract quality:
+
+- **Hoare triples** — every `pub fn` documents pre- and post-conditions
+- **Panic safety** — no `unwrap` / `expect` / `panic!` outside tests
+- **Type discipline** — newtypes, `PhantomData`, typestate patterns
+- **Size discipline** — average function length ≤ 40 lines
+- **Error handling** — `Result` propagation instead of silent crashes
+
+It auto-fixes mechanical issues, tracks improvement over time, and exposes an **LSP server** for real-time editor feedback.
 
 ![Demo](assets/demo.svg)
 
-`cargo-kimi` scores every Rust file 0–100 on contract quality: Hoare triples, panic safety, newtypes, typestate, and function length. It auto-fixes mechanical issues and tracks improvement over time.
+---
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Commands](#commands)
+- [Scoring System](#scoring-system)
+- [Editor Integration (LSP)](#editor-integration-lsp)
+- [GitHub Action](#github-action)
+- [Configuration](#configuration)
+- [FAQ](#faq)
+- [Development](#development)
+- [License](#license)
 
 ---
 
 ## Installation
 
+**From crates.io** (recommended):
+
 ```bash
 cargo install cargo-kimi
 ```
 
-Or from source:
+**From source:**
 
 ```bash
 cargo install --git https://github.com/ekhodzitsky/cargo-kimi cargo-kimi
 ```
 
+**Requirements:**
+- Rust **1.80+**
+- `cargo` in `$PATH`
+
 ---
 
-## 30-Second Demo
+## Quick Start
 
 ```bash
-$ cargo kimi init --template rust-only --yes
-$ cargo kimi check
+# 1. Initialize guidelines in your Rust project
+cargo kimi init --template rust-only --yes
 
+# 2. Check contract score
+cargo kimi check
+
+# 3. Preview auto-fixes
+cargo kimi fix --dry-run
+
+# 4. Apply mechanical fixes
+cargo kimi fix
+
+# 5. Watch for changes during development
+cargo kimi watch
+```
+
+**Example output:**
+
+```text
 === Running contract checker (strictness: standard) ===
 
 src/main.rs (score: 85)
-  [MAJOR] L42: pub fn 'parse_config' missing Hoare triple doc comment
-  [CRITICAL] L67: unwrap()/expect()/panic!() found outside tests: let port = env::var("PORT").unwrap();
+  🔴 [CRITICAL] L67: unwrap()/expect()/panic!() found outside tests: let port = env::var("PORT").unwrap();
+  🟠 [MAJOR]    L42: pub fn 'parse_config' missing Hoare triple doc comment
 
 src/lib.rs (score: 100)
 
-Found 2 issues (CRITICAL: 1, MAJOR: 1, MINOR: 0, INFO: 0)
 Average score: 92/100
-
-=== Running cargo clippy ===
-    Finished dev [unoptimized + debuginfo] target(s) in 0.42s
-
-=== Running cargo test ===
-    Running unittests src/lib.rs
-    test result: ok. 14 passed
-
-✅ All checks passed
 ```
 
 ---
 
 ## Commands
 
-### `cargo kimi init`
-
-Initialize AI coding guidelines in the current project.
-
-```bash
-cargo kimi init --template rust-only --strictness strict --yes
-```
-
-**Templates:**
-- `minimal` — Core rules only (`AGENTS.md`)
-- `rust-only` — Core rules + Rust-specific lints (default)
-- `full` — Core rules + Rust + CI + benchmarks
-- `modular` — Split rules into `.kimi/parts/` directory for large projects
+| Command | What it does |
+|---------|--------------|
+| `cargo kimi init` | Write `AGENTS.md` + `.cargo/config.toml` (clippy lints) |
+| `cargo kimi check` | Run contract checker + `cargo clippy` + `cargo test` |
+| `cargo kimi fix` | Auto-insert Hoare triples, replace `unwrap()` with `?`, add `// SAFETY:` |
+| `cargo kimi watch` | Watch `src/` and re-run checks on every save |
+| `cargo kimi trend` | Show ASCII bar chart of score history |
+| `cargo kimi badge` | Generate `kimi-score.svg` for your README |
+| `cargo kimi verify` | Run `cargo kani` formal verification (requires `kani-verifier`) |
+| `cargo kimi lsp` | Start LSP server for real-time diagnostics |
+| `cargo kimi mcp` | Start MCP server for Claude Code / Codex integration |
+| `cargo kimi init-skill` | Generate a `SKILL.md` template |
 
 ### `cargo kimi check`
 
-Run mechanized checks and compute a 0–100 contract score.
-
 ```bash
-cargo kimi check                   # Standard strictness + clippy + tests
-cargo kimi check --strictness strict
-cargo kimi check --format json     # Pure JSON output for CI (no clippy/test)
-cargo kimi check --format sarif    # SARIF for GitHub Code Scanning
+cargo kimi check                          # text + clippy + tests
+cargo kimi check --strictness strict      # stricter rules
+cargo kimi check --format json            # pure JSON (no clippy/test)
+cargo kimi check --format sarif           # SARIF for GitHub Code Scanning
 ```
-
-Scoring breakdown:
-- Hoare triples on `pub fn` — 30 pts
-- No `unwrap`/`expect`/`panic` — 20 pts
-- Newtype wrappers — 10 pts
-- `PhantomData` usage — 10 pts
-- Typestate patterns — 10 pts
-- Average function length ≤ 40 lines — 10 pts
-- Proper `Result` handling — 10 pts
-
-**Score exemptions:** Add `// kimi:score-ignore=unwrap,unsafe` in the first 10 lines of a file to waive specific penalties (issues are still reported with `[EXEMPT]`). Useful for FFI boundaries and generated code.
 
 ### `cargo kimi fix`
 
-Auto-fix mechanical issues: insert Hoare triple stubs, replace `unwrap()` with `?`,
-and add `// SAFETY:` comments before `unsafe` blocks.
-
 ```bash
-cargo kimi fix --dry-run           # Preview changes
-cargo kimi fix                     # Apply fixes
+cargo kimi fix --dry-run                  # preview changes
+cargo kimi fix                            # apply fixes
 ```
 
-**What it does:**
-- Adds `/// { precondition }` / `/// { postcondition }` doc comments above `pub fn`
-- Replaces `.unwrap()` → `?` where the return type allows it
-- Replaces `.expect("msg")` → `.map_err(|e| format!("msg: {e}"))?`
-- Adds `// SAFETY: TODO: explain why this is safe` before `unsafe` blocks
+**Transformations:**
+- `pub fn foo()` → inserts `/// { TODO: precondition }` / `/// { TODO: postcondition }`
+- `.unwrap()` → `?` (when return type is `Result` / `Option`)
+- `.expect("msg")` → `.map_err(|e| format!("msg: {e}"))?`
+- `unsafe { ... }` → inserts `// SAFETY: TODO: explain why this is safe`
 
 ### `cargo kimi watch`
 
-Watch source files and re-run checks on every save.
-
 ```bash
-cargo kimi watch                   # Text output, 500ms debounce
-cargo kimi watch --format json     # JSON output for editor integration
-cargo kimi watch --debounce-ms 200 # Faster feedback
+cargo kimi watch --debounce-ms 200        # faster feedback
+cargo kimi watch --format json            # JSON for editor integration
 ```
 
-### `cargo kimi trend`
+---
 
-Show score history as an ASCII bar chart.
+## Scoring System
 
-```bash
-cargo kimi trend --days 30
-```
+Score is computed per-file (0–100) and averaged across the project:
 
-Scores are appended to `.kimi/score-history.jsonl` after every `cargo kimi check`.
+| Criterion | Weight | How to satisfy |
+|-----------|--------|----------------|
+| Hoare triples on `pub fn` | 30 pts | Add `/// { precondition }` / `/// { postcondition }` doc comments |
+| No `unwrap` / `expect` / `panic!` | 20 pts | Use `?`, `ok_or`, `map_err` |
+| Newtype wrappers | 10 pts | `pub struct Foo(Bar)` for domain types |
+| `PhantomData` usage | 10 pts | Use `std::marker::PhantomData` where appropriate |
+| Typestate patterns | 10 pts | `enum` + `impl` + `From<...>` |
+| Avg function length ≤ 40 lines | 10 pts | Extract helper functions |
+| `Result<...>` return types | 10 pts | Propagate errors instead of unwrapping |
 
-### `cargo kimi badge`
+**Exemptions:** Add `// kimi:score-ignore=unwrap,unsafe` in the first 10 lines of a file to waive specific penalties. Issues are still reported as `[EXEMPT]`.
 
-Generate an SVG score badge for your README.
+---
 
-```bash
-cargo kimi badge                   # writes kimi-score.svg
-cargo kimi badge --output assets/badge.svg
-```
-
-### `cargo kimi verify`
-
-Run formal verification with Kani (requires `kani-verifier`).
-
-```bash
-cargo kimi verify
-```
-
-### `cargo kimi init-skill`
-
-Generate a `SKILL.md` with YAML frontmatter compatible with agent skills.
-
-```bash
-cargo kimi init-skill my-skill "Description of what this skill does"
-```
-
-### `cargo kimi mcp`
-
-Start an MCP server over stdio for Claude Code, Codex, and other MCP clients.
-
-```bash
-cargo kimi mcp
-```
-
-Exposes the `check_contracts` tool natively — no shell execution required.
-
-### `cargo kimi lsp`
-
-Start an LSP server for real-time diagnostics and code actions in any editor.
+## Editor Integration (LSP)
 
 ```bash
 cargo kimi lsp
 ```
 
 **Features:**
-- **Diagnostics** — contract issues inline while you type (with debounce on save)
-- **Code Actions** — quick fixes: "Insert Hoare triple", "Add SAFETY comment"
+- **Diagnostics** — squiggles for contract violations while you type
+- **Code Actions** — ⌘+. / Ctrl+. → "Insert Hoare triple", "Add SAFETY comment"
 - **Hover** — file score and issue count on hover
 
-**Neovim example (via lspconfig):**
+**Neovim** (`lspconfig`):
 
 ```lua
 require('lspconfig').cargo_kimi.setup {
@@ -189,7 +177,45 @@ require('lspconfig').cargo_kimi.setup {
 }
 ```
 
-**VS Code:** Use the generic LSP client extension (e.g., `generic-lsp`) pointed at `cargo kimi lsp`.
+**VS Code:** Use any generic LSP client extension pointed at `cargo kimi lsp`.
+
+---
+
+## GitHub Action
+
+Add contract checking to your CI:
+
+```yaml
+# .github/workflows/kimi.yml
+name: Kimi Contract Check
+
+on:
+  pull_request:
+    paths:
+      - '**.rs'
+      - 'Cargo.toml'
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: ekhodzitsky/cargo-kimi/.github/actions/cargo-kimi@main
+        with:
+          strictness: standard
+          fail-on-drop: 60
+          post-comment: true
+```
+
+**Inputs:**
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `strictness` | `standard` | Contract strictness level |
+| `fail-on-drop` | `0` | Fail CI if score drops below threshold (0 = off) |
+| `post-comment` | `true` | Post PR comment with results |
 
 ---
 
@@ -209,78 +235,31 @@ ignore = ["tests/", "benches/"]
 format = "rich"
 ```
 
-When present, `cargo kimi` automatically reads these values as defaults for `check`, `watch`, and `badge`.
+When present, `cargo-kimi` reads these values as defaults for `check`, `watch`, and `badge`.
 
-## Strictness Levels
+### Strictness Levels
 
-- `relaxed` — Only critical violations fail
-- `standard` — Critical + major (default)
-- `strict` — All violations including minor and info
-
----
-
-## GitHub Action
-
-Add contract checking to your CI with automatic PR comments:
-
-```yaml
-# .github/workflows/kimi.yml
-name: Kimi Contract Check
-
-on:
-  pull_request:
-    paths:
-      - '**.rs'
-      - 'Cargo.toml'
-
-jobs:
-  contracts:
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ekhodzitsky/cargo-kimi/.github/actions/cargo-kimi@main
-        with:
-          strictness: standard
-          fail-on-drop: 60
-          post-comment: true
-```
-
-**Inputs:**
-
-| Input | Default | Description |
-|-------|---------|-------------|
-| `strictness` | `standard` | Contract strictness level |
-| `fail-on-drop` | `0` | Fail CI if score drops below threshold (0 = off) |
-| `post-comment` | `true` | Post PR comment with results |
+| Level | Fails on |
+|-------|----------|
+| `relaxed` | Critical issues only |
+| `standard` | Critical + Major (default) |
+| `strict` | Critical + Major + Minor + Info |
 
 ---
 
-## Example Workflow
+## FAQ
 
-```bash
-# Initialize a Rust project with strict rules
-cargo kimi init --template rust-only --strictness strict --yes
+**Q: Will `cargo-kimi` break my build?**  
+A: No. `cargo kimi check` runs `cargo clippy` and `cargo test` **after** contract checks, but contract failures alone do not modify your code. Use `cargo kimi fix` explicitly to apply changes.
 
-# Check current score
-cargo kimi check
+**Q: Can I use this without the guidelines repo?**  
+A: Yes. `cargo-kimi` is a standalone tool. The [kimi-guidelines](https://github.com/ekhodzitsky/kimi-guidelines) repo provides editorial context; the CLI enforces mechanics.
 
-# Preview auto-fixes
-cargo kimi fix --dry-run
+**Q: Does it work on workspaces?**  
+A: Yes. It discovers all workspace members via `cargo metadata`.
 
-# Apply mechanical fixes
-cargo kimi fix
-
-# Re-check after fixes
-cargo kimi check
-
-# Watch for changes during development
-cargo kimi watch
-
-# View score trend over time
-cargo kimi trend --days 14
-```
+**Q: What about `unsafe` code?**  
+A: `unsafe fn` declarations are allowed. `unsafe` blocks require a `// SAFETY:` comment. Add `// kimi:score-ignore=unsafe` for FFI boundaries.
 
 ---
 
@@ -290,7 +269,7 @@ cargo kimi trend --days 14
 git clone https://github.com/ekhodzitsky/cargo-kimi.git
 cd cargo-kimi
 cargo test
-cargo clippy -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 cargo audit
 cargo deny check
 ```
