@@ -106,15 +106,32 @@ fn is_integral_type(t: &str) -> bool {
     matches!(t, "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8" | "i16" | "i32" | "i64" | "i128" | "isize")
 }
 
+/// { t is a valid Rust primitive type name }
+/// fn is_float_type(t: &str) -> bool
+/// { result == (t is a floating-point primitive) }
+fn is_float_type(t: &str) -> bool {
+    matches!(t, "f32" | "f64")
+}
+
 /// { s is a valid ASCII identifier }
 /// fn to_snake_case(s: &str) -> String
 /// { result == s converted to snake_case }
 fn to_snake_case(s: &str) -> String {
     let mut result = String::new();
-    for (i, c) in s.chars().enumerate() {
+    let chars: Vec<char> = s.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
         if c.is_uppercase() {
             if i > 0 {
-                result.push('_');
+                let prev = chars[i - 1];
+                // Insert underscore if previous char is lowercase, OR
+                // if previous char is uppercase and next char is lowercase (end of acronym)
+                if prev.is_lowercase()
+                    || (prev.is_uppercase()
+                        && i + 1 < chars.len()
+                        && chars[i + 1].is_lowercase())
+                {
+                    result.push('_');
+                }
             }
             result.push(c.to_ascii_lowercase());
         } else {
@@ -172,9 +189,15 @@ pub fn scan_project(src_dir: &Path) -> anyhow::Result<Vec<TestCase>> {
                         Newtype { inner_type: inner },
                     );
                     if let Some(ref derive) = pending_derive {
-                        if derive.contains("Ord") { traits.entry(name.clone()).or_default().has_ord = true; }
-                        if derive.contains("Eq") || derive.contains("PartialEq") { traits.entry(name.clone()).or_default().has_eq = true; }
-                        if derive.contains("Clone") { traits.entry(name.clone()).or_default().has_clone = true; }
+                        let derive_items: Vec<&str> = derive
+                            .trim_start_matches("#[derive(")
+                            .trim_end_matches(")]")
+                            .split(',')
+                            .map(|d| d.trim())
+                            .collect();
+                        if derive_items.contains(&"Ord") { traits.entry(name.clone()).or_default().has_ord = true; }
+                        if derive_items.contains(&"Eq") || derive_items.contains(&"PartialEq") { traits.entry(name.clone()).or_default().has_eq = true; }
+                        if derive_items.contains(&"Clone") { traits.entry(name.clone()).or_default().has_clone = true; }
                     }
                     pending_derive = None;
                     continue;
@@ -204,8 +227,11 @@ pub fn scan_project(src_dir: &Path) -> anyhow::Result<Vec<TestCase>> {
     }
 
     let mut test_cases = Vec::new();
-    for (type_name, t) in traits {
+    for (type_name, mut t) in traits {
         if let Some(newtype) = newtypes.get(&type_name) {
+            // Deduplicate ops to avoid duplicate test function names
+            let mut seen = std::collections::HashSet::new();
+            t.ops.retain(|op| seen.insert(op.clone()));
             test_cases.push(TestCase {
                 type_name: type_name.clone(),
                 inner_type: newtype.inner_type.clone(),
@@ -282,7 +308,7 @@ pub fn generate_tests(test_cases: &[TestCase]) -> String {
                 output.push_str("        }\n");
                 output.push_str("    }\n\n");
             } else {
-                if op.has_associativity() {
+                if op.has_associativity() && !is_float_type(inner) {
                     output.push_str("    proptest! {\n");
                     output.push_str("        #[test]\n");
                     output.push_str(&format!(
@@ -442,6 +468,9 @@ mod tests {
         assert_eq!(to_snake_case("Foo"), "foo");
         assert_eq!(to_snake_case("foo_bar"), "foo_bar");
         assert_eq!(to_snake_case("A"), "a");
+        assert_eq!(to_snake_case("HTTPServer"), "http_server");
+        assert_eq!(to_snake_case("XMLParser"), "xml_parser");
+        assert_eq!(to_snake_case("getHTTPResponse"), "get_http_response");
     }
 
     #[test]

@@ -197,7 +197,7 @@ fn handle_tool_call(id: Option<serde_json::Value>, params: &serde_json::Value) -
                 }
             }
         }
-        _ => error_response(id, -32601, format!("Unknown tool: {name}")),
+        _ => error_response(id, -32602, format!("Unknown tool: {name}")),
     }
 }
 
@@ -263,6 +263,13 @@ pub fn run_server() -> anyhow::Result<()> {
                 continue;
             }
         };
+
+        if req.jsonrpc != "2.0" {
+            let resp = error_response(req.id, -32600, "Invalid Request: jsonrpc must be \"2.0\"".into());
+            writeln!(stdout, "{}", serde_json::to_string(&resp)?)?;
+            stdout.flush()?;
+            continue;
+        }
 
         let resp = match req.method.as_str() {
             "initialize" => handle_initialize(req.id),

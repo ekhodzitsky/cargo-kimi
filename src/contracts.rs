@@ -8,12 +8,10 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 static HOARE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*///\s*\{").unwrap());
-static UNWRAP_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\b(unwrap\(\)|expect\s*\(|panic!\s*\()").unwrap());
-static FALSE_POSITIVE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\b(unwrap_or\(|unwrap_or_else\(|unwrap_or_default\()").unwrap());
+static UNWRAP_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\b(unwrap\(\)|unwrap_unchecked\(\)|expect\s*\(|panic!\s*\()").unwrap());
 static UNSAFE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\bunsafe\b").unwrap());
 static SAFETY_COMMENT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"//\s*SAFETY:").unwrap());
-static PUB_FN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*(pub\s+)?(async\s+)?(unsafe\s+)?fn\s+").unwrap());
-static _PUB_FN_WITH_DOC_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*///\s*\{.*\n^\s*(pub\s+)?(async\s+)?(unsafe\s+)?fn\s+").unwrap());
+static PUB_FN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"^\s*(pub(\s*\([^)]*\))?\s+)?(async\s+)?(unsafe\s+)?(const\s+)?(extern\s+("\w+"\s+)?)?fn\s+"#).unwrap());
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub enum Severity {
@@ -21,22 +19,6 @@ pub enum Severity {
     Major,
     Minor,
     Info,
-}
-
-impl Severity {
-    /// { s is a non-empty severity string }
-    /// pub fn from_str(s: &str) -> `Option<Self>`
-    /// { result == Some(sev) iff s matches a known severity }
-    #[allow(dead_code)]
-    pub fn from_name(s: &str) -> Option<Self> {
-        match s {
-            "CRITICAL" => Some(Severity::Critical),
-            "MAJOR" => Some(Severity::Major),
-            "MINOR" => Some(Severity::Minor),
-            "INFO" => Some(Severity::Info),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -102,6 +84,20 @@ impl CheckConfig {
     /// pub fn check_files(paths: &[PathBuf], config: &CheckConfig) -> `anyhow::Result<Vec<FileReport>>`
     /// { result contains FileReport for every .rs file found, filtered by config.strictness }
 pub fn check_files(paths: &[PathBuf], config: &CheckConfig) -> anyhow::Result<Vec<FileReport>> {
+    check_files_with_ignore(paths, config, &[])
+}
+
+    /// { paths contains valid file or directory paths, ignore_patterns is a list of path patterns to skip }
+    /// pub fn check_files_with_ignore(paths: &[PathBuf], config: &CheckConfig, ignore_patterns: &[String]) -> `anyhow::Result<Vec<FileReport>>`
+    /// { result contains FileReport for every non-ignored .rs file found, filtered by config.strictness }
+pub fn check_files_with_ignore(paths: &[PathBuf], config: &CheckConfig, ignore_patterns: &[String]) -> anyhow::Result<Vec<FileReport>> {
+    let kimi_config = crate::config::KimiConfig {
+        score: Some(crate::config::ScoreConfig {
+            ignore: ignore_patterns.to_vec(),
+        }),
+        ..Default::default()
+    };
+
     let mut reports = Vec::new();
     let mut files = Vec::new();
 
@@ -128,6 +124,14 @@ pub fn check_files(paths: &[PathBuf], config: &CheckConfig) -> anyhow::Result<Ve
 
     files.sort();
     files.dedup();
+
+    // Filter out files matching score.ignore patterns
+    if !ignore_patterns.is_empty() {
+        files.retain(|f| {
+            let path_str = f.to_string_lossy();
+            !kimi_config.should_ignore(&path_str)
+        });
+    }
 
     for file in &files {
         let bytes = match std::fs::read(file) {
@@ -177,10 +181,42 @@ pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> 
     let mut in_safety_comment = false;
 
     // Two-pass: first find all pub fn and check Hoare triples
+    // Build set of line indices inside test modules to skip
+    let mut test_line_indices: HashSet<usize> = HashSet::new();
+    {
+        let mut in_test = false;
+        let mut depth = 0i32;
+        for (i, line) in lines.iter().enumerate() {
+            let t = line.trim();
+            if !in_test
+                && (t.starts_with("#[cfg(test)]")
+                    || t.starts_with("mod tests")
+                    || t.starts_with("pub mod tests"))
+            {
+                in_test = true;
+                depth = 0;
+                let (open, close) = count_braces_outside_strings(t);
+                depth += open;
+                depth -= close;
+                test_line_indices.insert(i);
+                continue;
+            }
+            if in_test {
+                let (open, close) = count_braces_outside_strings(t);
+                depth += open;
+                depth -= close;
+                test_line_indices.insert(i);
+                if depth <= 0 && t == "}" {
+                    in_test = false;
+                }
+            }
+        }
+    }
+
     let pub_fn_indices: Vec<usize> = lines
         .iter()
         .enumerate()
-        .filter(|(_, line)| PUB_FN_RE.is_match(line))
+        .filter(|(i, line)| PUB_FN_RE.is_match(line) && !test_line_indices.contains(i))
         .map(|(i, _)| i)
         .collect();
 
@@ -207,7 +243,7 @@ pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> 
         let fn_line = lines[fn_idx];
         let is_pub = fn_line.trim().starts_with("pub");
 
-        if is_pub && !has_hoare {
+        if is_pub && !has_hoare && !exemptions.contains("hoare") {
             issues.push(Issue {
                 file: path.to_path_buf(),
                 line: fn_idx + 1,
@@ -256,7 +292,11 @@ pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> 
         }
 
         // Check unwrap/expect/panic
-        if UNWRAP_RE.is_match(line) && !FALSE_POSITIVE_RE.is_match(line) && !in_test_block && !in_safety_comment {
+        if !exemptions.contains("unwrap")
+            && UNWRAP_RE.is_match(line)
+            && !in_test_block
+            && !in_safety_comment
+        {
             issues.push(Issue {
                 file: path.to_path_buf(),
                 line: idx + 1,
@@ -289,8 +329,8 @@ pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> 
             }
         }
 
-        // Reset safety comment flag at end of block
-        if trimmed.ends_with("}") {
+        // Reset safety comment flag when we hit `unsafe` (consumed) or a new fn declaration
+        if UNSAFE_RE.is_match(line) || PUB_FN_RE.is_match(line) || trimmed.is_empty() {
             in_safety_comment = false;
         }
     }
@@ -347,6 +387,11 @@ fn compute_score(lines: &[&str], content: &str, issues: &[Issue], exemptions: &H
     });
     if has_unwrap {
         score = score.saturating_sub(20);
+    }
+
+    // Skip bonus pattern scoring for minimal files (< 20 lines)
+    if lines.len() < 20 {
+        return score;
     }
 
     // Newtype: 10 pts (tuple struct with single field, e.g. `pub struct Foo(Bar)`)
@@ -415,7 +460,7 @@ fn compute_score(lines: &[&str], content: &str, issues: &[Issue], exemptions: &H
     score
 }
 
-fn extract_fn_name(line: &str) -> String {
+pub(crate) fn extract_fn_name(line: &str) -> String {
     let parts: Vec<&str> = line.split_whitespace().collect();
     for (i, &part) in parts.iter().enumerate() {
         if part == "fn" && i + 1 < parts.len() {

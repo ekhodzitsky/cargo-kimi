@@ -99,8 +99,9 @@ fn load_entries(days: Days) -> anyhow::Result<Vec<HistoryEntry>> {
     Ok(entries)
 }
 
+/// Groups entries by calendar day, keeping only the last entry per day (last-write-wins).
 fn group_by_day(entries: Vec<HistoryEntry>) -> Vec<(String, HistoryEntry)> {
-    let mut by_day: HashMap<String, HistoryEntry> = HashMap::new();
+    let mut latest_by_day: HashMap<String, HistoryEntry> = HashMap::new();
     for entry in entries {
         let day = entry
             .timestamp
@@ -108,9 +109,9 @@ fn group_by_day(entries: Vec<HistoryEntry>) -> Vec<(String, HistoryEntry)> {
             .next()
             .unwrap_or(&entry.timestamp)
             .to_string();
-        by_day.insert(day, entry);
+        latest_by_day.insert(day, entry);
     }
-    let mut days_vec: Vec<_> = by_day.into_iter().collect();
+    let mut days_vec: Vec<_> = latest_by_day.into_iter().collect();
     days_vec.sort_by(|a, b| a.0.cmp(&b.0));
     days_vec
 }

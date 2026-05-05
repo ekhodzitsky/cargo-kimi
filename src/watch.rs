@@ -9,14 +9,18 @@ use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 pub fn run_watch(strictness: &str, format: &str, debounce_ms: u64) -> anyhow::Result<()> {
     let (tx, rx) = mpsc::channel::<notify::Result<notify::Event>>();
 
+    let poll_interval_ms = 500;
     let mut watcher = RecommendedWatcher::new(
         move |res| {
             let _ = tx.send(res);
         },
-        Config::default().with_poll_interval(Duration::from_millis(debounce_ms)),
+        Config::default().with_poll_interval(Duration::from_millis(poll_interval_ms)),
     )?;
 
     let paths = crate::workspace::find_workspace_crates()?;
+    if paths.is_empty() {
+        anyhow::bail!("No Rust source directories found to watch");
+    }
     for path in &paths {
         if path.is_dir() {
             watcher.watch(path, RecursiveMode::Recursive)?;

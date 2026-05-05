@@ -73,9 +73,23 @@ pub fn cmd_init(
 
     // Write .cargo/config.toml for Rust projects
     if Path::new("Cargo.toml").exists() {
-        fs::create_dir_all(".cargo")?;
-        fs::write(".cargo/config.toml", clippy)?;
-        println!("✓ Created .cargo/config.toml (strictness: {})", strictness);
+        let cargo_config = Path::new(".cargo/config.toml");
+        if cargo_config.exists() && !yes {
+            print!(".cargo/config.toml already exists. Overwrite? [y/N] ");
+            io::stdout().flush()?;
+            let mut buf = String::new();
+            io::stdin().read_line(&mut buf)?;
+            if !buf.trim().eq_ignore_ascii_case("y") {
+                println!("Skipped .cargo/config.toml");
+            } else {
+                fs::write(cargo_config, clippy)?;
+                println!("✓ Created .cargo/config.toml (strictness: {})", strictness);
+            }
+        } else {
+            fs::create_dir_all(".cargo")?;
+            fs::write(cargo_config, clippy)?;
+            println!("✓ Created .cargo/config.toml (strictness: {})", strictness);
+        }
     } else {
         println!("⚠ No Cargo.toml found — skipping .cargo/config.toml");
     }

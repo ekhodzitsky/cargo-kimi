@@ -69,15 +69,15 @@ impl LanguageServer for Backend {
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri;
         let text = params.text_document.text;
-        self.check_and_publish(uri.clone(), &text).await;
-        self.documents.write().await.insert(uri, text);
+        self.documents.write().await.insert(uri.clone(), text.clone());
+        self.check_and_publish(uri, &text).await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri;
         if let Some(change) = params.content_changes.into_iter().next() {
-            self.check_and_publish(uri.clone(), &change.text).await;
-            self.documents.write().await.insert(uri, change.text);
+            self.documents.write().await.insert(uri.clone(), change.text.clone());
+            self.check_and_publish(uri, &change.text).await;
         }
     }
 
@@ -95,7 +95,10 @@ impl LanguageServer for Backend {
             }
         };
 
-        let path = uri.to_file_path().unwrap_or_default();
+        let path = match uri.to_file_path() {
+            Ok(p) => p,
+            Err(_) => return Ok(None),
+        };
         let report = match contracts::check_file_contents(&path, &text, &STANDARD_CONFIG) {
             Ok(r) => r,
             Err(_) => return Ok(None),
@@ -121,7 +124,10 @@ impl LanguageServer for Backend {
             }
         };
 
-        let path = uri.to_file_path().unwrap_or_default();
+        let path = match uri.to_file_path() {
+            Ok(p) => p,
+            Err(_) => return Ok(None),
+        };
         let report = match contracts::check_file_contents(&path, &text, &STANDARD_CONFIG) {
             Ok(r) => r,
             Err(_) => return Ok(None),
@@ -153,7 +159,10 @@ impl LanguageServer for Backend {
 
 impl Backend {
     async fn check_and_publish(&self, uri: Url, text: &str) {
-        let path = uri.to_file_path().unwrap_or_default();
+        let path = match uri.to_file_path() {
+            Ok(p) => p,
+            Err(_) => return,
+        };
         let report = match contracts::check_file_contents(&path, text, &STANDARD_CONFIG) {
             Ok(r) => r,
             Err(_) => return,
@@ -188,7 +197,7 @@ fn issue_to_diagnostic(issue: &contracts::Issue) -> Diagnostic {
         },
         end: Position {
             line: (issue.line.saturating_sub(1)) as u32,
-            character: u32::MAX,
+            character: 10_000,
         },
     };
 

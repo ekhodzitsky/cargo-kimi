@@ -21,38 +21,29 @@ pub fn load_config(path: Option<&Path>) -> anyhow::Result<KimiConfig> {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-#[allow(dead_code)]
 pub struct KimiConfig {
     pub contracts: Option<ContractsConfig>,
-    #[allow(dead_code)]
     pub score: Option<ScoreConfig>,
     pub output: Option<OutputConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-#[allow(dead_code)]
 pub struct ContractsConfig {
     pub strictness: Option<String>,
-    #[serde(rename = "fail-on-drop")]
-    #[allow(dead_code)]
-    pub fail_on_drop: Option<u32>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-#[allow(dead_code)]
 pub struct ScoreConfig {
-    #[allow(dead_code)]
+    #[serde(default)]
     pub ignore: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-#[allow(dead_code)]
 pub struct OutputConfig {
     pub format: Option<String>,
 }
 
 impl KimiConfig {
-#[allow(dead_code)]
     /// { self.contracts.strictness is Some or None }
     /// pub fn strictness(&self) -> Option<&str>
     /// { returns the configured strictness level }
@@ -67,25 +58,32 @@ impl KimiConfig {
         self.output.as_ref()?.format.as_deref()
     }
 
-    #[allow(dead_code)]
-    /// { self.contracts.fail_on_drop is Some or None }
-    /// pub fn fail_on_drop(&self) -> `Option<u32>`
-    /// { returns the configured fail-on-drop threshold }
-    pub fn fail_on_drop(&self) -> Option<u32> {
-        self.contracts.as_ref()?.fail_on_drop
-    }
-
-    #[allow(dead_code)]
-    /// { path is any string }
+    /// { path is any file path string }
     /// pub fn should_ignore(&self, path: &str) -> bool
-    /// { true if path matches any ignore pattern }
+    /// { true if any path component equals a pattern or path starts with a pattern }
     pub fn should_ignore(&self, path: &str) -> bool {
         self.score
             .as_ref()
-            .map(|s| s.ignore.iter().any(|pat| path.contains(pat)))
+            .map(|s| {
+                s.ignore.iter().any(|pat| {
+                    // Check if the path starts with the pattern (prefix match)
+                    path.starts_with(pat)
+                        // Or if any path component exactly equals the pattern
+                        || Path::new(path)
+                            .components()
+                            .any(|c| c.as_os_str() == pat.as_str())
+                })
+            })
             .unwrap_or(false)
     }
-}
 
-#[allow(dead_code)]
-pub struct Strictness(pub(crate) String);
+    /// { self.score.ignore contains zero or more patterns }
+    /// pub fn ignore_patterns(&self) -> &[String]
+    /// { returns the configured ignore patterns slice }
+    pub fn ignore_patterns(&self) -> &[String] {
+        self.score
+            .as_ref()
+            .map(|s| s.ignore.as_slice())
+            .unwrap_or(&[])
+    }
+}

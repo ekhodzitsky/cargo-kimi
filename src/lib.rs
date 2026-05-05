@@ -1,6 +1,3 @@
-#[allow(dead_code)]
-pub struct Score(pub(crate) u32);
-
 pub mod badge;
 pub mod cli;
 pub mod config;
@@ -28,9 +25,13 @@ pub fn cmd_check(strictness: &str, format: &str) -> anyhow::Result<()> {
     let strictness = cfg.strictness().unwrap_or(strictness);
     let format = cfg.output_format().unwrap_or(format);
 
+    if !matches!(format, "text" | "json" | "sarif") {
+        anyhow::bail!("Unknown output format '{}'. Supported formats: text, json, sarif", format);
+    }
+
     let config = contracts::CheckConfig::from_strictness(strictness)?;
     let paths = workspace::find_workspace_crates()?;
-    let reports = contracts::check_files(&paths, &config)?;
+    let reports = contracts::check_files_with_ignore(&paths, &config, cfg.ignore_patterns())?;
 
     if format == "json" {
         let json = serde_json::to_string_pretty(&reports)?;

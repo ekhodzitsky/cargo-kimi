@@ -4,6 +4,7 @@
 //! Scans the project for Hoare-tripled `pub fn` and checks whether
 //! each one has a corresponding `#[kani::proof]` harness.
 
+use crate::contracts::extract_fn_name;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -32,29 +33,61 @@ pub struct MissingProof {
     pub function: String,
 }
 
-/// { crate_root is a valid directory containing src/ }
+/// Collect all `.rs` files under the given directories using walkdir.
+fn collect_rs_files(dirs: &[PathBuf]) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    for dir in dirs {
+        for entry in walkdir::WalkDir::new(dir)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("rs") {
+                files.push(path.to_path_buf());
+            }
+        }
+    }
+    files
+}
+
+/// Resolve scan directories for the given crate root.
+///
+/// If `src/` exists, use it. Otherwise try `cargo metadata` to discover
+/// workspace member source directories. As a final fallback, scan from
+/// `crate_root` itself.
+fn resolve_scan_dirs(crate_root: &Path) -> Vec<PathBuf> {
+    let src_dir = crate_root.join("src");
+    if src_dir.exists() {
+        return vec![src_dir];
+    }
+
+    // Try workspace discovery via cargo metadata
+    if let Ok(dirs) = crate::workspace::find_workspace_crates() {
+        if !dirs.is_empty() {
+            return dirs;
+        }
+    }
+
+    // Fallback: scan from crate_root itself
+    vec![crate_root.to_path_buf()]
+}
+
+/// { crate_root is a valid directory }
 /// pub fn check_coverage(crate_root: &Path) -> `anyhow::Result<CoverageReport>`
 /// { returns coverage report with missing and covered Hoare-tripled functions }
 pub fn check_coverage(crate_root: &Path) -> anyhow::Result<CoverageReport> {
-    let src_dir = crate_root.join("src");
-    if !src_dir.exists() {
-        anyhow::bail!("No src/ directory found in {}", crate_root.display());
-    }
+    let scan_dirs = resolve_scan_dirs(crate_root);
 
-    // 1. Collect all pub fn with Hoare triples
+    // 1. Collect all .rs files once and reuse for both passes
+    let rs_files = collect_rs_files(&scan_dirs);
+
+    // 2. Collect all pub fn with Hoare triples
     let mut hoare_fns: HashMap<String, (PathBuf, usize)> = HashMap::new();
-    for entry in walkdir::WalkDir::new(&src_dir)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        let path = entry.path();
-        if path.extension().and_then(|s| s.to_str()) != Some("rs") {
-            continue;
-        }
+    for path in &rs_files {
         let content = std::fs::read_to_string(path)?;
         let lines: Vec<&str> = content.lines().collect();
 
@@ -86,11 +119,14 @@ pub fn check_coverage(crate_root: &Path) -> anyhow::Result<CoverageReport> {
         }
     }
 
-    // 2. Collect all functions called inside #[kani::proof] harnesses
+    // 3. Collect all functions called inside #[kani::proof] harnesses
+    //    Search ALL .rs files, not just a hardcoded path.
     let mut proven_fns: HashSet<String> = HashSet::new();
-    let kani_proofs = src_dir.join("kani_proofs.rs");
-    if kani_proofs.exists() {
-        let content = std::fs::read_to_string(&kani_proofs)?;
+    for path in &rs_files {
+        let content = std::fs::read_to_string(path)?;
+        if !content.contains("#[kani::proof]") {
+            continue;
+        }
         let lines: Vec<&str> = content.lines().collect();
         let mut in_proof = false;
         let mut proof_depth = 0i32;
@@ -121,7 +157,7 @@ pub fn check_coverage(crate_root: &Path) -> anyhow::Result<CoverageReport> {
         }
     }
 
-    // 3. Build report
+    // 4. Build report
     let mut report = CoverageReport {
         total: hoare_fns.len(),
         ..Default::default()
@@ -138,20 +174,6 @@ pub fn check_coverage(crate_root: &Path) -> anyhow::Result<CoverageReport> {
     Ok(report)
 }
 
-fn extract_fn_name(line: &str) -> String {
-    let parts: Vec<&str> = line.split_whitespace().collect();
-    for (i, &part) in parts.iter().enumerate() {
-        if part == "fn" && i + 1 < parts.len() {
-            let name = parts[i + 1].trim_start_matches("fn ");
-            if let Some(pos) = name.find(['(', '<']) {
-                return name[..pos].to_string();
-            }
-            return name.to_string();
-        }
-    }
-    "unknown".to_string()
-}
-
 /// { report is a valid CoverageReport }
 /// pub fn print_coverage(report: &CoverageReport)
 /// { prints formatted coverage summary to stdout }
@@ -161,7 +183,7 @@ pub fn print_coverage(report: &CoverageReport) {
     println!(
         "\n{}  {}",
         "🔍 Formal Verification Coverage".bold(),
-        format!("({}/{}", report.covered.len(), report.total).dimmed()
+        format!("({}/{})", report.covered.len(), report.total).dimmed()
     );
     println!("{}", "───────────────────────────────────────────".dimmed());
 
