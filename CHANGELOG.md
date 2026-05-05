@@ -4,6 +4,12 @@ All notable changes to `cargo-kimi` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.6.3] - 2026-05-05
+
+### Fixed
+
+- **CI**: Actually committed `Cargo.lock` (removed from root `.gitignore`)
+
 ## [1.6.2] - 2026-05-05
 
 ### Fixed

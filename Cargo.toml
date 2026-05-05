@@ -1,6 +1,6 @@
 [package]
 name = "cargo-kimi"
-version = "1.6.2"
+version = "1.6.3"
 rust-version = "1.80"
 include = ["src/**/*", "assets/**/*", "README.md", "CHANGELOG.md"]
 edition = "2021"
