@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 #[derive(Debug, Deserialize)]
@@ -11,6 +11,7 @@ struct Metadata {
 #[derive(Debug, Deserialize)]
 struct Package {
     name: String,
+    #[allow(dead_code)]
     manifest_path: String,
     targets: Vec<Target>,
 }
@@ -21,6 +22,9 @@ struct Target {
     src_path: String,
 }
 
+    /// { current directory is inside a Cargo workspace or package }
+    /// pub fn find_workspace_crates() -> anyhow::Result<Vec<PathBuf>>
+    /// { result contains src/ directories for all workspace members }
 pub fn find_workspace_crates() -> anyhow::Result<Vec<PathBuf>> {
     let output = Command::new("cargo")
         .args(["metadata", "--format-version", "1", "--no-deps"])
@@ -31,7 +35,7 @@ pub fn find_workspace_crates() -> anyhow::Result<Vec<PathBuf>> {
     }
 
     let metadata: Metadata = serde_json::from_slice(&output.stdout)?;
-    let member_names: std::collections::HashSet<_> = metadata.workspace_members.iter().map(|m| m.split(' ').next().unwrap().to_string()).collect();
+    let member_names: std::collections::HashSet<_> = metadata.workspace_members.iter().map(|m| m.split(' ').next().unwrap_or("").to_string()).collect();
 
     let mut src_dirs = Vec::new();
     for pkg in metadata.packages {

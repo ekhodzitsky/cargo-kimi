@@ -1,6 +1,8 @@
 [package]
 name = "cargo-kimi"
-version = "1.5.0"
+version = "1.6.0"
+rust-version = "1.80"
+include = ["src/**/*", "assets/**/*", "README.md", "CHANGELOG.md"]
 edition = "2021"
 description = "Cargo subcommand for kimi-dotfiles guidelines and verification"
 license = "MIT"
@@ -20,3 +22,10 @@ regex = "1.11"
 walkdir = "2.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+tempfile = "3.14"
+assert_cmd = "2.0"
+predicates = "3.1"
+

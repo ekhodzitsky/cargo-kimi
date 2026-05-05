@@ -1,157 +1,57 @@
+mod cli;
 mod contracts;
+mod fix;
+mod init;
+mod mcp;
+mod skills;
 mod testgen;
+mod trend;
 mod workspace;
 
-use clap::{Parser, Subcommand};
-use std::fs;
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
-/// Cargo subcommand for kimi-dotfiles — structured contracts for Rust
-#[derive(Parser)]
-#[command(name = "cargo-kimi")]
-#[command(about = "Initialize, check, and verify Rust projects with kimi-dotfiles guidelines")]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    /// Initialize kimi-dotfiles in the current project
-    Init {
-        /// Template to use
-        #[arg(short, long, value_name = "NAME", default_value = "rust-only")]
-        template: String,
-        /// Strictness level for clippy config
-        #[arg(short, long, value_name = "LEVEL", default_value = "standard")]
-        strictness: String,
-        /// Where to place AGENTS.md (root or .kimi)
-        #[arg(short, long, value_name = "PATH", default_value = "auto")]
-        location: String,
-        /// Skip confirmation prompts
-        #[arg(short, long)]
-        yes: bool,
-    },
-    /// Run mechanized checks: contracts, clippy, tests
-    Check {
-        /// Strictness level for contract checker
-        #[arg(short, long, value_name = "LEVEL", default_value = "standard")]
-        strictness: String,
-    },
-    /// Run formal verification with Kani (if installed)
-    Verify,
-    /// Generate property tests for newtypes with arithmetic impls
-    GenerateTests {
-        /// Output file path (default: tests/property_tests.rs)
-        #[arg(short, long)]
-        output: Option<String>,
-    },
-    /// Show upgrade instructions
-    Upgrade,
-}
-
-// Embedded AGENTS.md templates
-const AGENTS_MINIMAL: &str = include_str!("../assets/templates/minimal/AGENTS.md");
-const AGENTS_RUST_ONLY: &str = include_str!("../assets/templates/rust-only/AGENTS.md");
-const AGENTS_FULL: &str = include_str!("../assets/templates/full/AGENTS.md");
-
-// Embedded clippy configs
-const CLIPPY_RELAXED: &str = include_str!("../assets/strictness/relaxed.toml");
-const CLIPPY_STANDARD: &str = include_str!("../assets/strictness/standard.toml");
-const CLIPPY_STRICT: &str = include_str!("../assets/strictness/strict.toml");
-
 fn main() -> anyhow::Result<()> {
-    let args = std::env::args().collect::<Vec<_>>();
-    // When invoked as `cargo kimi`, cargo passes `kimi` as the first argument.
-    // We need to strip it so clap sees only our subcommands.
-    let args = if args.get(1).map(|s| s.as_str()) == Some("kimi") {
-        let mut filtered = vec![args[0].clone()];
-        filtered.extend(args.into_iter().skip(2));
-        filtered
-    } else {
-        args
-    };
-    let cli = Cli::parse_from(args);
-    match cli.command {
-        Commands::Init {
-            template,
-            strictness,
-            location,
-            yes,
-        } => cmd_init(&template, &strictness, &location, yes),
-        Commands::Check { strictness } => cmd_check(&strictness),
-        Commands::Verify => cmd_verify(),
-        Commands::GenerateTests { output } => cmd_generate_tests(output.as_deref()),
-        Commands::Upgrade => cmd_upgrade(),
-    }
+    cli::run()
 }
 
-fn cmd_init(template: &str, strictness: &str, location: &str, yes: bool) -> anyhow::Result<()> {
-    let agents = resolve_agents(template)?;
-    let clippy = resolve_clippy(strictness)?;
-
-    let target_path = match location {
-        "auto" => {
-            if Path::new(".kimi/AGENTS.md").exists() {
-                ".kimi/AGENTS.md"
-            } else {
-                "AGENTS.md"
-            }
-        }
-        ".kimi" => {
-            fs::create_dir_all(".kimi")?;
-            ".kimi/AGENTS.md"
-        }
-        "root" => "AGENTS.md",
-        _ => anyhow::bail!("Unknown location: '{}'. Available: auto, root, .kimi", location),
-    };
-
-    // Confirm overwrite
-    if Path::new(target_path).exists() && !yes {
-        print!("{} already exists. Overwrite? [y/N] ", target_path);
-        io::stdout().flush()?;
-        let mut buf = String::new();
-        io::stdin().read_line(&mut buf)?;
-        if buf.trim().to_ascii_lowercase() != "y" {
-            println!("Aborted.");
-            return Ok(());
-        }
-    }
-
-    // Write AGENTS.md
-    fs::write(target_path, agents)?;
-    println!("✓ Created {} (template: {})", target_path, template);
-
-    // Write .cargo/config.toml for Rust projects
-    if Path::new("Cargo.toml").exists() {
-        fs::create_dir_all(".cargo")?;
-        fs::write(".cargo/config.toml", clippy)?;
-        println!("✓ Created .cargo/config.toml (strictness: {})", strictness);
-    } else {
-        println!("⚠ No Cargo.toml found — skipping .cargo/config.toml");
-    }
-
-    if Path::new("Cargo.toml").exists() {
-        println!("\nNext: git add {} .cargo/config.toml && git commit -m 'Add kimi-dotfiles guidelines'", target_path);
-    } else {
-        println!("\nNext: git add {} && git commit -m 'Add kimi-dotfiles guidelines'", target_path);
-    }
-    Ok(())
-}
-
-fn cmd_check(strictness: &str) -> anyhow::Result<()> {
-    println!("=== Running contract checker (strictness: {}) ===", strictness);
+/// { strictness is a valid strictness level, format is "text" or "json" }
+/// fn cmd_check(strictness: &str, format: &str) -> anyhow::Result<()>
+/// { runs contract checker, prints reports, then clippy + tests }
+fn cmd_check(strictness: &str, format: &str) -> anyhow::Result<()> {
     let config = contracts::CheckConfig::from_strictness(strictness)?;
     let paths = workspace::find_workspace_crates()?;
     let reports = contracts::check_files(&paths, &config)?;
+
+    if format == "json" {
+        let json = serde_json::to_string_pretty(&reports)?;
+        println!("{}", json);
+        // Skip clippy/test and history when emitting JSON — output must be pure JSON
+        let has_critical = reports.iter().any(|r| {
+            r.issues.iter().any(|i| {
+                i.severity == contracts::Severity::Critical
+                    && !contracts::is_exempt(i, &r.exemptions)
+            })
+        });
+        if has_critical {
+            anyhow::bail!("Contract check failed: critical issues found");
+        }
+        return Ok(());
+    }
+
+    println!("=== Running contract checker (strictness: {}) ===", strictness);
     contracts::print_reports(&reports);
 
+    // Append scores to history for trend tracking
+    if let Err(e) = trend::append_history(&reports) {
+        eprintln!("⚠ Failed to append score history: {}", e);
+    }
+
     let has_critical = reports.iter().any(|r| {
-        r.issues
-            .iter()
-            .any(|i| i.severity == contracts::Severity::Critical)
+        r.issues.iter().any(|i| {
+            i.severity == contracts::Severity::Critical
+                && !contracts::is_exempt(i, &r.exemptions)
+        })
     });
     if has_critical {
         anyhow::bail!("❌ Contract check failed: critical issues found");
@@ -175,6 +75,9 @@ fn cmd_check(strictness: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// { Kani verifier is installed }
+/// fn cmd_verify() -> anyhow::Result<()>
+/// { runs cargo kani on the current workspace }
 fn cmd_verify() -> anyhow::Result<()> {
     println!("=== Checking Kani installation ===");
     let status = Command::new("cargo")
@@ -199,40 +102,47 @@ fn cmd_verify() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// { output path is inside project directory }
+/// fn cmd_generate_tests(output: Option<&str>) -> anyhow::Result<()>
+/// { scans src/ for newtypes and generates proptest property tests }
 fn cmd_generate_tests(output: Option<&str>) -> anyhow::Result<()> {
     let src = Path::new("src");
     let out = output.map(Path::new);
+    if let Some(p) = out {
+        if p.components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            anyhow::bail!("Output path cannot contain parent directory references (..)");
+        }
+        let cwd = std::env::current_dir()?.canonicalize()?;
+        let abs_path = if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            cwd.join(p)
+        };
+        let mut normalized = std::path::PathBuf::new();
+        for comp in abs_path.components() {
+            match comp {
+                std::path::Component::CurDir => {}
+                _ => normalized.push(comp),
+            }
+        }
+        if !normalized.starts_with(&cwd) {
+            anyhow::bail!("Output path must be inside the project directory");
+        }
+    }
     testgen::write_tests(src, out)
 }
 
+/// { true }
+/// fn cmd_upgrade() -> anyhow::Result<()>
+/// { prints upgrade instructions to stdout }
 fn cmd_upgrade() -> anyhow::Result<()> {
     println!("To upgrade cargo-kimi, run:");
-    println!("  cargo install --force --git https://github.com/ekhodzitsky/kimi-dotfiles cargo-kimi");
+    println!(
+        "  cargo install --force --git https://github.com/ekhodzitsky/kimi-dotfiles cargo-kimi"
+    );
     println!("\nTo update project guidelines, re-run:");
     println!("  cargo kimi init --template rust-only --yes");
     Ok(())
-}
-
-fn resolve_agents(name: &str) -> anyhow::Result<&'static str> {
-    match name {
-        "minimal" => Ok(AGENTS_MINIMAL),
-        "rust-only" => Ok(AGENTS_RUST_ONLY),
-        "full" => Ok(AGENTS_FULL),
-        _ => anyhow::bail!(
-            "Unknown template: '{}'. Available: minimal, rust-only, full",
-            name
-        ),
-    }
-}
-
-fn resolve_clippy(level: &str) -> anyhow::Result<&'static str> {
-    match level {
-        "relaxed" => Ok(CLIPPY_RELAXED),
-        "standard" => Ok(CLIPPY_STANDARD),
-        "strict" => Ok(CLIPPY_STRICT),
-        _ => anyhow::bail!(
-            "Unknown strictness: '{}'. Available: relaxed, standard, strict",
-            level
-        ),
-    }
 }

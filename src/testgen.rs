@@ -1,10 +1,19 @@
+// kimi:score-ignore=unwrap
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::LazyLock;
+
+static STRUCT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*pub\s+struct\s+(\w+)\s*\(\s*(\w+)\s*\)").unwrap());
+static IMPL_ADD_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"impl\s+(std::ops::)?Add\s+(for\s+)?(\w+)").unwrap());
+static IMPL_SUB_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"impl\s+(std::ops::)?Sub\s+(for\s+)?(\w+)").unwrap());
+static IMPL_MUL_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"impl\s+(std::ops::)?Mul\s+(for\s+)?(\w+)").unwrap());
+static IMPL_ORD_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"impl\s+Ord\s+(for\s+)?(\w+)").unwrap());
+static IMPL_EQ_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"impl\s+(Partial)?Eq\s+(for\s+)?(\w+)").unwrap());
+static IMPL_CLONE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"impl\s+Clone\s+(for\s+)?(\w+)").unwrap());
 
 #[derive(Debug, Clone)]
 pub struct Newtype {
-    pub name: String,
     pub inner_type: String,
 }
 
@@ -16,6 +25,9 @@ pub enum Op {
 }
 
 impl Op {
+    /// { true }
+    /// fn as_str(&self) -> &'static str
+    /// { result ∈ {"Add", "Sub", "Mul"} }
     pub fn as_str(&self) -> &'static str {
         match self {
             Op::Add => "Add",
@@ -24,14 +36,9 @@ impl Op {
         }
     }
 
-    pub fn method_name(&self) -> &'static str {
-        match self {
-            Op::Add => "add",
-            Op::Sub => "sub",
-            Op::Mul => "mul",
-        }
-    }
-
+    /// { true }
+    /// fn symbol(&self) -> &'static str
+    /// { result ∈ {"+", "-", "*"} }
     pub fn symbol(&self) -> &'static str {
         match self {
             Op::Add => "+",
@@ -40,6 +47,9 @@ impl Op {
         }
     }
 
+    /// { true }
+    /// fn identity_value(&self) -> &'static str
+    /// { result ∈ {"(0)", "(1)"} }
     pub fn identity_value(&self) -> &'static str {
         match self {
             Op::Add => "(0)",
@@ -48,10 +58,27 @@ impl Op {
         }
     }
 
+    /// { true }
+    /// fn wrapping_method(&self) -> &'static str
+    /// { result ∈ {"wrapping_add", "wrapping_sub", "wrapping_mul"} }
+    pub fn wrapping_method(&self) -> &'static str {
+        match self {
+            Op::Add => "wrapping_add",
+            Op::Sub => "wrapping_sub",
+            Op::Mul => "wrapping_mul",
+        }
+    }
+
+    /// { true }
+    /// fn has_commutativity(&self) -> bool
+    /// { result == (self == Add || self == Mul) }
     pub fn has_commutativity(&self) -> bool {
         matches!(self, Op::Add | Op::Mul)
     }
 
+    /// { true }
+    /// fn has_associativity(&self) -> bool
+    /// { result == (self == Add || self == Mul) }
     pub fn has_associativity(&self) -> bool {
         matches!(self, Op::Add | Op::Mul)
     }
@@ -72,6 +99,16 @@ pub struct TestCase {
     pub traits: Traits,
 }
 
+/// { t is a valid Rust primitive type name }
+/// fn is_integral_type(t: &str) -> bool
+/// { result == (t is an integer primitive) }
+fn is_integral_type(t: &str) -> bool {
+    matches!(t, "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8" | "i16" | "i32" | "i64" | "i128" | "isize")
+}
+
+/// { s is a valid ASCII identifier }
+/// fn to_snake_case(s: &str) -> String
+/// { result == s converted to snake_case }
 fn to_snake_case(s: &str) -> String {
     let mut result = String::new();
     for (i, c) in s.chars().enumerate() {
@@ -87,66 +124,81 @@ fn to_snake_case(s: &str) -> String {
     result
 }
 
+/// { src_dir exists and is readable }
+/// pub fn scan_project(src_dir: &Path) -> anyhow::Result<Vec<TestCase>>
+/// { result contains all newtypes with arithmetic traits found in src_dir }
 pub fn scan_project(src_dir: &Path) -> anyhow::Result<Vec<TestCase>> {
     let mut newtypes: HashMap<String, Newtype> = HashMap::new();
     let mut traits: HashMap<String, Traits> = HashMap::new();
 
-    let struct_re = Regex::new(r"^\s*pub\s+struct\s+(\w+)\s*\(\s*(\w+)\s*\)").unwrap();
-    let impl_add_re = Regex::new(r"impl\s+(std::ops::)?Add\s+(for\s+)?(\w+)").unwrap();
-    let impl_sub_re = Regex::new(r"impl\s+(std::ops::)?Sub\s+(for\s+)?(\w+)").unwrap();
-    let impl_mul_re = Regex::new(r"impl\s+(std::ops::)?Mul\s+(for\s+)?(\w+)").unwrap();
-    let impl_ord_re = Regex::new(r"impl\s+Ord\s+(for\s+)?(\w+)").unwrap();
-    let impl_eq_re = Regex::new(r"impl\s+(Partial)?Eq\s+(for\s+)?(\w+)").unwrap();
-    let impl_clone_re = Regex::new(r"impl\s+Clone\s+(for\s+)?(\w+)").unwrap();
-    let derive_re = Regex::new(r"#\[derive\([^)]*(\bOrd\b|\bEq\b|\bClone\b|\bPartialOrd\b|\bPartialEq\b)[^)]*\)\]").unwrap();
-
-    for entry in walkdir::WalkDir::new(src_dir)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file() && e.path().extension().map(|ext| ext == "rs").unwrap_or(false))
-    {
-        let content = std::fs::read_to_string(entry.path())?;
-        let mut pending_derive: Option<String> = None;
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed.starts_with("#[derive(") {
-                pending_derive = Some(trimmed.to_string());
+    for entry_result in walkdir::WalkDir::new(src_dir).follow_links(false) {
+        let entry = match entry_result {
+            Ok(e) => e,
+            Err(err) => {
+                eprintln!("Warning: {}", err);
                 continue;
             }
-            if let Some(cap) = struct_re.captures(line) {
-                let name = cap[1].to_string();
-                let inner = cap[2].to_string();
-                newtypes.insert(
-                    name.clone(),
-                    Newtype { name: name.clone(), inner_type: inner },
-                );
-                if let Some(ref derive) = pending_derive {
-                    if derive.contains("Ord") { traits.entry(name.clone()).or_default().has_ord = true; }
-                    if derive.contains("Eq") || derive.contains("PartialEq") { traits.entry(name.clone()).or_default().has_eq = true; }
-                    if derive.contains("Clone") { traits.entry(name.clone()).or_default().has_clone = true; }
+        };
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if entry.path().extension().map(|ext| ext == "rs").unwrap_or(false) {
+            let bytes = match std::fs::read(entry.path()) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprintln!("Warning: could not read {}: {}", entry.path().display(), e);
+                    continue;
+                }
+            };
+            let content = match String::from_utf8(bytes) {
+                Ok(s) => s,
+                Err(_) => {
+                    eprintln!("Warning: skipping non-UTF8 file: {}", entry.path().display());
+                    continue;
+                }
+            };
+            let mut pending_derive: Option<String> = None;
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("#[derive(") {
+                    pending_derive = Some(trimmed.to_string());
+                    continue;
+                }
+                if let Some(cap) = STRUCT_RE.captures(line) {
+                    let name = cap[1].to_string();
+                    let inner = cap[2].to_string();
+                    newtypes.insert(
+                        name.clone(),
+                        Newtype { inner_type: inner },
+                    );
+                    if let Some(ref derive) = pending_derive {
+                        if derive.contains("Ord") { traits.entry(name.clone()).or_default().has_ord = true; }
+                        if derive.contains("Eq") || derive.contains("PartialEq") { traits.entry(name.clone()).or_default().has_eq = true; }
+                        if derive.contains("Clone") { traits.entry(name.clone()).or_default().has_clone = true; }
+                    }
+                    pending_derive = None;
+                    continue;
                 }
                 pending_derive = None;
-                continue;
-            }
-            pending_derive = None;
 
-            if let Some(cap) = impl_add_re.captures(line) {
-                traits.entry(cap[3].to_string()).or_default().ops.push(Op::Add);
-            }
-            if let Some(cap) = impl_sub_re.captures(line) {
-                traits.entry(cap[3].to_string()).or_default().ops.push(Op::Sub);
-            }
-            if let Some(cap) = impl_mul_re.captures(line) {
-                traits.entry(cap[3].to_string()).or_default().ops.push(Op::Mul);
-            }
-            if let Some(cap) = impl_ord_re.captures(line) {
-                traits.entry(cap[2].to_string()).or_default().has_ord = true;
-            }
-            if let Some(cap) = impl_eq_re.captures(line) {
-                traits.entry(cap[3].to_string()).or_default().has_eq = true;
-            }
-            if let Some(cap) = impl_clone_re.captures(line) {
-                traits.entry(cap[2].to_string()).or_default().has_clone = true;
+                if let Some(cap) = IMPL_ADD_RE.captures(line) {
+                    traits.entry(cap[3].to_string()).or_default().ops.push(Op::Add);
+                }
+                if let Some(cap) = IMPL_SUB_RE.captures(line) {
+                    traits.entry(cap[3].to_string()).or_default().ops.push(Op::Sub);
+                }
+                if let Some(cap) = IMPL_MUL_RE.captures(line) {
+                    traits.entry(cap[3].to_string()).or_default().ops.push(Op::Mul);
+                }
+                if let Some(cap) = IMPL_ORD_RE.captures(line) {
+                    traits.entry(cap[2].to_string()).or_default().has_ord = true;
+                }
+                if let Some(cap) = IMPL_EQ_RE.captures(line) {
+                    traits.entry(cap[3].to_string()).or_default().has_eq = true;
+                }
+                if let Some(cap) = IMPL_CLONE_RE.captures(line) {
+                    traits.entry(cap[2].to_string()).or_default().has_clone = true;
+                }
             }
         }
     }
@@ -166,6 +218,9 @@ pub fn scan_project(src_dir: &Path) -> anyhow::Result<Vec<TestCase>> {
     Ok(test_cases)
 }
 
+    /// { test_cases are valid scanned newtype definitions }
+    /// pub fn generate_tests(test_cases: &[TestCase]) -> String
+    /// { result is valid Rust source code for proptest property tests }
 pub fn generate_tests(test_cases: &[TestCase]) -> String {
     let mut output = String::new();
     output.push_str("#[cfg(test)]\n");
@@ -182,47 +237,89 @@ pub fn generate_tests(test_cases: &[TestCase]) -> String {
         let inner = &case.inner_type;
 
         // Arithmetic tests
+        let integral = is_integral_type(&case.inner_type);
         for op in &case.traits.ops {
             let op_str = op.as_str().to_lowercase();
             let sym = op.symbol();
 
-            if op.has_associativity() {
+            if integral {
+                let wrap = op.wrapping_method();
+                if op.has_associativity() {
+                    output.push_str("    proptest! {\n");
+                    output.push_str("        #[test]\n");
+                    output.push_str(&format!(
+                        "        fn {type_name_snake}_{op_str}_associativity(a in any::<{inner}>().prop_map({type_name}), b in any::<{inner}>().prop_map({type_name}), c in any::<{inner}>().prop_map({type_name})) {{\n"
+                    ));
+                    output.push_str(&format!(
+                        "            prop_assert_eq!(a.{wrap}(b.{wrap}(c)), (a.{wrap}(b)).{wrap}(c));\n"
+                    ));
+                    output.push_str("        }\n");
+                    output.push_str("    }\n\n");
+                }
+
+                if op.has_commutativity() {
+                    output.push_str("    proptest! {\n");
+                    output.push_str("        #[test]\n");
+                    output.push_str(&format!(
+                        "        fn {type_name_snake}_{op_str}_commutativity(a in any::<{inner}>().prop_map({type_name}), b in any::<{inner}>().prop_map({type_name})) {{\n"
+                    ));
+                    output.push_str(&format!(
+                        "            prop_assert_eq!(a.{wrap}(b), b.{wrap}(a));\n"
+                    ));
+                    output.push_str("        }\n");
+                    output.push_str("    }\n\n");
+                }
+
+                let identity = op.identity_value();
                 output.push_str("    proptest! {\n");
                 output.push_str("        #[test]\n");
                 output.push_str(&format!(
-                    "        fn {type_name_snake}_{op_str}_associativity(a in any::<{inner}>().prop_map({type_name}), b in any::<{inner}>().prop_map({type_name}), c in any::<{inner}>().prop_map({type_name})) {{\n"
+                    "        fn {type_name_snake}_{op_str}_identity(a in any::<{inner}>().prop_map({type_name})) {{\n"
                 ));
                 output.push_str(&format!(
-                    "            prop_assert_eq!(a {sym} (b {sym} c), (a {sym} b) {sym} c);\n"
+                    "            prop_assert_eq!(a.{wrap}({type_name}{identity}), a);\n"
+                ));
+                output.push_str("        }\n");
+                output.push_str("    }\n\n");
+            } else {
+                if op.has_associativity() {
+                    output.push_str("    proptest! {\n");
+                    output.push_str("        #[test]\n");
+                    output.push_str(&format!(
+                        "        fn {type_name_snake}_{op_str}_associativity(a in any::<{inner}>().prop_map({type_name}), b in any::<{inner}>().prop_map({type_name}), c in any::<{inner}>().prop_map({type_name})) {{\n"
+                    ));
+                    output.push_str(&format!(
+                        "            prop_assert_eq!(a {sym} (b {sym} c), (a {sym} b) {sym} c);\n"
+                    ));
+                    output.push_str("        }\n");
+                    output.push_str("    }\n\n");
+                }
+
+                if op.has_commutativity() {
+                    output.push_str("    proptest! {\n");
+                    output.push_str("        #[test]\n");
+                    output.push_str(&format!(
+                        "        fn {type_name_snake}_{op_str}_commutativity(a in any::<{inner}>().prop_map({type_name}), b in any::<{inner}>().prop_map({type_name})) {{\n"
+                    ));
+                    output.push_str(&format!(
+                        "            prop_assert_eq!(a {sym} b, b {sym} a);\n"
+                    ));
+                    output.push_str("        }\n");
+                    output.push_str("    }\n\n");
+                }
+
+                let identity = op.identity_value();
+                output.push_str("    proptest! {\n");
+                output.push_str("        #[test]\n");
+                output.push_str(&format!(
+                    "        fn {type_name_snake}_{op_str}_identity(a in any::<{inner}>().prop_map({type_name})) {{\n"
+                ));
+                output.push_str(&format!(
+                    "            prop_assert_eq!(a {sym} {type_name}{identity}, a);\n"
                 ));
                 output.push_str("        }\n");
                 output.push_str("    }\n\n");
             }
-
-            if op.has_commutativity() {
-                output.push_str("    proptest! {\n");
-                output.push_str("        #[test]\n");
-                output.push_str(&format!(
-                    "        fn {type_name_snake}_{op_str}_commutativity(a in any::<{inner}>().prop_map({type_name}), b in any::<{inner}>().prop_map({type_name})) {{\n"
-                ));
-                output.push_str(&format!(
-                    "            prop_assert_eq!(a {sym} b, b {sym} a);\n"
-                ));
-                output.push_str("        }\n");
-                output.push_str("    }\n\n");
-            }
-
-            let identity = op.identity_value();
-            output.push_str("    proptest! {\n");
-            output.push_str("        #[test]\n");
-            output.push_str(&format!(
-                "        fn {type_name_snake}_{op_str}_identity(a in any::<{inner}>().prop_map({type_name})) {{\n"
-            ));
-            output.push_str(&format!(
-                "            prop_assert_eq!(a {sym} {type_name}{identity}, a);\n"
-            ));
-            output.push_str("        }\n");
-            output.push_str("    }\n\n");
         }
 
         // Ord tests
@@ -288,6 +385,46 @@ pub fn generate_tests(test_cases: &[TestCase]) -> String {
     output
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_snake_case_variants() {
+        assert_eq!(to_snake_case("FooBar"), "foo_bar");
+        assert_eq!(to_snake_case("Foo"), "foo");
+        assert_eq!(to_snake_case("foo_bar"), "foo_bar");
+        assert_eq!(to_snake_case("A"), "a");
+    }
+
+    #[test]
+    fn is_integral_type_all_twelve_true() {
+        for t in [
+            "u8", "u16", "u32", "u64", "u128", "usize",
+            "i8", "i16", "i32", "i64", "i128", "isize",
+        ] {
+            assert!(is_integral_type(t), "{} should be integral", t);
+        }
+    }
+
+    #[test]
+    fn is_integral_type_non_integral_false() {
+        for t in ["String", "f32", "bool"] {
+            assert!(!is_integral_type(t), "{} should not be integral", t);
+        }
+    }
+
+    #[test]
+    fn op_wrapping_method_variants() {
+        assert_eq!(Op::Add.wrapping_method(), "wrapping_add");
+        assert_eq!(Op::Sub.wrapping_method(), "wrapping_sub");
+        assert_eq!(Op::Mul.wrapping_method(), "wrapping_mul");
+    }
+}
+
+    /// { src_dir exists and is writable }
+    /// pub fn write_tests(src_dir: &Path, output_path: Option<&Path>) -> anyhow::Result<()>
+    /// { writes generated property tests to output_path or src_dir/kimi_property_tests.rs }
 pub fn write_tests(src_dir: &Path, output_path: Option<&Path>) -> anyhow::Result<()> {
     let test_cases = scan_project(src_dir)?;
 
@@ -314,6 +451,23 @@ pub fn write_tests(src_dir: &Path, output_path: Option<&Path>) -> anyhow::Result
         Some(p) => p.to_path_buf(),
         None => src_dir.join("kimi_property_tests.rs"),
     };
+
+    // Validate output path doesn't escape project root
+    if target.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        anyhow::bail!("Output path cannot contain parent directory references (..)");
+    }
+    let cwd = std::env::current_dir()?.canonicalize()?;
+    let abs_target = if target.is_absolute() { target.clone() } else { cwd.join(&target) };
+    let mut normalized = std::path::PathBuf::new();
+    for comp in abs_target.components() {
+        match comp {
+            std::path::Component::CurDir => {}
+            _ => normalized.push(comp),
+        }
+    }
+    if !normalized.starts_with(&cwd) {
+        anyhow::bail!("Output path must be inside the project directory");
+    }
 
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;

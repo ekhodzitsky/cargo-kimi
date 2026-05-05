@@ -1,0 +1,12 @@
+# Runtime score history
+.kimi/score-history.jsonl
+
+# Build artifacts
+target/
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
