@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "cargo-kimi")]
 #[command(about = "Initialize, check, and verify Rust projects with kimi-dotfiles guidelines")]
+#[command(version)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,

@@ -28,6 +28,21 @@ jobs:
       - name: Install cargo-kimi
         run: cargo install --path . --locked
 
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        run: cargo audit
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Run cargo deny
+        run: cargo deny check
+
       - name: Run tests
         run: RUST_TEST_THREADS=1 cargo test
 
