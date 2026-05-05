@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - **`cargo kimi fix` preserves doc comments**: When a `pub fn` already has a descriptive doc block, the Hoare triple is now inserted **after** the existing description instead of replacing it. Also wraps the signature in backticks to avoid rustdoc HTML warnings.
+- **`pub(crate) fn` recognition**: `pub(crate) fn` is now correctly recognized as public (fixes in both `contracts.rs` and `verify.rs`).
+- **SAFETY comment tracking**: `// SAFETY:` comments now correctly cover the next `unsafe` block even when other statements appear between them (removed erroneous reset on `;`).
+- **Function length calculation**: `compute_score` now ignores `{` and `}` inside string literals when measuring average function length.
+- **`mod tests` detection**: `unwrap()` inside `mod tests { ... }` blocks is now correctly exempted even without an explicit `#[cfg(test)]` attribute.
+- **Kani proof tracking**: `verify.rs` no longer resets `in_proof` when encountering nested functions inside a `#[kani::proof]` harness.
+- **LSP code action consistency**: Hoare triple stubs now include the function signature wrapped in backticks, matching `cargo kimi fix` behavior.
 
 ## [1.6.7] - 2026-05-05
 

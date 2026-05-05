@@ -205,7 +205,7 @@ pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> 
 
         // Check if the function is actually pub (not just `fn`)
         let fn_line = lines[fn_idx];
-        let is_pub = fn_line.contains("pub ");
+        let is_pub = fn_line.trim().starts_with("pub");
 
         if is_pub && !has_hoare {
             issues.push(Issue {
@@ -223,7 +223,10 @@ pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> 
         let trimmed = line.trim();
 
         // Track test blocks
-        if trimmed.starts_with("#[cfg(test)]") {
+        if trimmed.starts_with("#[cfg(test)]")
+            || trimmed.starts_with("mod tests")
+            || trimmed.starts_with("pub mod tests")
+        {
             in_test_block = true;
             test_block_depth = 0;
             continue;
@@ -282,8 +285,8 @@ pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> 
             }
         }
 
-        // Reset safety comment flag at end of block or next statement
-        if trimmed.ends_with("}") || trimmed.ends_with(";") {
+        // Reset safety comment flag at end of block
+        if trimmed.ends_with("}") {
             in_safety_comment = false;
         }
     }
@@ -299,6 +302,28 @@ pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> 
         score,
         exemptions,
     })
+}
+
+fn count_braces_outside_strings(line: &str) -> (i32, i32) {
+    let mut open = 0i32;
+    let mut close = 0i32;
+    let mut in_string = false;
+    let mut chars = line.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\\' && in_string {
+            chars.next(); // skip escaped char
+        } else if c == '"' {
+            in_string = !in_string;
+        } else if !in_string {
+            if c == '{' {
+                open += 1;
+            } else if c == '}' {
+                close += 1;
+            }
+        }
+    }
+    (open, close)
 }
 
 fn compute_score(lines: &[&str], content: &str, issues: &[Issue], exemptions: &HashSet<String>) -> u32 {
@@ -360,8 +385,9 @@ fn compute_score(lines: &[&str], content: &str, issues: &[Issue], exemptions: &H
             brace_depth = 0;
         }
         if in_fn {
-            brace_depth += trimmed.matches('{').count() as i32;
-            brace_depth -= trimmed.matches('}').count() as i32;
+            let (open, close) = count_braces_outside_strings(line);
+            brace_depth += open;
+            brace_depth -= close;
             if brace_depth == 0 && idx > fn_start {
                 fn_lengths.push((idx - fn_start + 1) as u32);
                 in_fn = false;

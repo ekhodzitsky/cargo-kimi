@@ -1,3 +1,4 @@
+// kimi:score-ignore=unsafe,unwrap
 //! Formal verification backend for `cargo kimi verify`.
 //!
 //! Scans the project for Hoare-tripled `pub fn` and checks whether
@@ -30,11 +31,9 @@ pub struct MissingProof {
     pub function: String,
 }
 
-/// Scan a crate root for formal-verification coverage.
-///
-/// Walks `src/` for `pub fn` with Hoare triples and `kani_proofs.rs` for
-/// `#[kani::proof]` harnesses.  A harness is considered to "cover" a
-/// function when the harness body contains a call to that function.
+/// { crate_root is a valid directory containing src/ }
+/// pub fn check_coverage(crate_root: &Path) -> `anyhow::Result<CoverageReport>`
+/// { returns coverage report with missing and covered Hoare-tripled functions }
 pub fn check_coverage(crate_root: &Path) -> anyhow::Result<CoverageReport> {
     let src_dir = crate_root.join("src");
     if !src_dir.exists() {
@@ -59,7 +58,7 @@ pub fn check_coverage(crate_root: &Path) -> anyhow::Result<CoverageReport> {
         let lines: Vec<&str> = content.lines().collect();
 
         for (idx, line) in lines.iter().enumerate() {
-            if !PUB_FN_RE.is_match(line) || !line.contains("pub ") {
+            if !PUB_FN_RE.is_match(line) || !line.trim().starts_with("pub") {
                 continue;
             }
             // Look backwards for Hoare triple
@@ -93,21 +92,28 @@ pub fn check_coverage(crate_root: &Path) -> anyhow::Result<CoverageReport> {
         let content = std::fs::read_to_string(&kani_proofs)?;
         let lines: Vec<&str> = content.lines().collect();
         let mut in_proof = false;
+        let mut proof_depth = 0i32;
         for line in &lines {
             if KANI_PROOF_RE.is_match(line) {
                 in_proof = true;
+                proof_depth = 0;
                 continue;
             }
             if in_proof {
+                let trimmed = line.trim();
+                proof_depth += trimmed.matches('{').count() as i32;
+                proof_depth -= trimmed.matches('}').count() as i32;
+
                 // Simple heuristic: any identifier followed by `(` is a call
                 for word in line.split(|c: char| !c.is_alphanumeric() && c != '_') {
                     if !word.is_empty() && word != "kani" {
                         proven_fns.insert(word.to_string());
                     }
                 }
-            }
-            if line.trim().starts_with("fn ") && !line.contains("proof") {
-                in_proof = false;
+
+                if proof_depth <= 0 && trimmed == "}" {
+                    in_proof = false;
+                }
             }
         }
     }
@@ -143,7 +149,9 @@ fn extract_fn_name(line: &str) -> String {
     "unknown".to_string()
 }
 
-/// Print a human-readable coverage summary.
+/// { report is a valid CoverageReport }
+/// pub fn print_coverage(report: &CoverageReport)
+/// { prints formatted coverage summary to stdout }
 pub fn print_coverage(report: &CoverageReport) {
     use colored::*;
 

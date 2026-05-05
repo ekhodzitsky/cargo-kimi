@@ -206,7 +206,15 @@ fn issue_to_code_action(issue: &contracts::Issue) -> Option<CodeAction> {
     let (title, edit) = match issue.category {
         contracts::IssueCategory::MissingHoareTriple => {
             let line = issue.line.saturating_sub(1);
-            let new_text = "/// { TODO: precondition }\n/// { TODO: postcondition }\n".to_string();
+            let fn_name = issue
+                .message
+                .strip_prefix("pub fn '")
+                .and_then(|s| s.split('\'').next())
+                .unwrap_or("unknown");
+            let new_text = format!(
+                "/// {{ TODO: precondition }}\n/// `pub fn {}`\n/// {{ TODO: postcondition }}\n",
+                fn_name
+            );
             let edit = TextEdit {
                 range: Range {
                     start: Position {
