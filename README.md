@@ -8,6 +8,8 @@ Cargo subcommand for [kimi-guidelines](https://github.com/ekhodzitsky/kimi-guide
 
 > **Making AI-generated code reviewable by humans in 30 seconds.**
 
+![Demo](assets/demo.svg)
+
 `cargo-kimi` scores every Rust file 0–100 on contract quality: Hoare triples, panic safety, newtypes, typestate, and function length. It auto-fixes mechanical issues and tracks improvement over time.
 
 ---
