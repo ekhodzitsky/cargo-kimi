@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 /// { path does not contain .. components }
-/// pub fn validate_project_path(path: &Path) -> anyhow::Result<PathBuf>
+/// pub fn validate_project_path(path: &Path) -> `anyhow::Result<PathBuf>`
 /// { returns the canonicalized absolute path, or an error if it escapes cwd }
 pub fn validate_project_path(path: &Path) -> anyhow::Result<PathBuf> {
     if path

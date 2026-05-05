@@ -25,7 +25,7 @@ pub enum Severity {
 
 impl Severity {
     /// { s is a non-empty severity string }
-    /// pub fn from_str(s: &str) -> Option<Self>
+    /// pub fn from_str(s: &str) -> `Option<Self>`
     /// { result == Some(sev) iff s matches a known severity }
     #[allow(dead_code)]
     pub fn from_name(s: &str) -> Option<Self> {
@@ -71,7 +71,7 @@ pub struct CheckConfig {
 
 impl CheckConfig {
     /// { level is one of "relaxed", "standard", "strict" }
-    /// pub fn from_strictness(level: &str) -> anyhow::Result<Self>
+    /// pub fn from_strictness(level: &str) -> `anyhow::Result<Self>`
     /// { result contains the severities matching the strictness level }
     pub fn from_strictness(level: &str) -> anyhow::Result<Self> {
         let mut set = HashSet::new();
@@ -99,7 +99,7 @@ impl CheckConfig {
 }
 
     /// { paths contains valid file or directory paths }
-    /// pub fn check_files(paths: &[PathBuf], config: &CheckConfig) -> anyhow::Result<Vec<FileReport>>
+    /// pub fn check_files(paths: &[PathBuf], config: &CheckConfig) -> `anyhow::Result<Vec<FileReport>>`
     /// { result contains FileReport for every .rs file found, filtered by config.strictness }
 pub fn check_files(paths: &[PathBuf], config: &CheckConfig) -> anyhow::Result<Vec<FileReport>> {
     let mut reports = Vec::new();
@@ -165,7 +165,7 @@ fn parse_exemptions(content: &str) -> HashSet<String> {
     exempt
 }
     /// { path is a valid file path, text is valid UTF-8 content, config matches a known strictness level }
-    /// pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> anyhow::Result<FileReport>
+    /// pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> `anyhow::Result<FileReport>`
     /// { result.is_ok() && result.as_ref().unwrap().issues are filtered by config.strictness }
 pub fn check_file_contents(path: &Path, content: &str, config: &CheckConfig) -> anyhow::Result<FileReport> {
     let lines: Vec<&str> = content.lines().collect();
@@ -400,7 +400,7 @@ fn extract_fn_name(line: &str) -> String {
 }
 
     /// { issue and exemptions are valid }
-    /// pub fn is_exempt(issue: &Issue, exemptions: &HashSet<String>) -> bool
+    /// pub fn is_exempt(issue: &Issue, exemptions: &`HashSet<String>`) -> bool
     /// { result == true iff issue.category is waived by exemptions }
 pub fn is_exempt(issue: &Issue, exemptions: &HashSet<String>) -> bool {
     if exemptions.contains("hoare") && issue.category == IssueCategory::MissingHoareTriple {

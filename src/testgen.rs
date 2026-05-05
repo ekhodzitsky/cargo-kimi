@@ -125,7 +125,7 @@ fn to_snake_case(s: &str) -> String {
 }
 
 /// { src_dir exists and is readable }
-/// pub fn scan_project(src_dir: &Path) -> anyhow::Result<Vec<TestCase>>
+/// pub fn scan_project(src_dir: &Path) -> `anyhow::Result<Vec<TestCase>>`
 /// { result contains all newtypes with arithmetic traits found in src_dir }
 pub fn scan_project(src_dir: &Path) -> anyhow::Result<Vec<TestCase>> {
     let mut newtypes: HashMap<String, Newtype> = HashMap::new();

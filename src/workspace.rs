@@ -24,7 +24,7 @@ struct Target {
 }
 
     /// { current directory is inside a Cargo workspace or package }
-    /// pub fn find_workspace_crates() -> anyhow::Result<Vec<PathBuf>>
+    /// pub fn find_workspace_crates() -> `anyhow::Result<Vec<PathBuf>>`
     /// { result contains src/ directories for all workspace members }
 pub fn find_workspace_crates() -> anyhow::Result<Vec<PathBuf>> {
     let output = Command::new("cargo")

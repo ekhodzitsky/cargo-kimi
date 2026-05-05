@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::path::Path;
 
 /// { path points to a valid TOML file or directory containing .kimi.toml }
-/// pub fn load_config(path: Option<&Path>) -> anyhow::Result<KimiConfig>
+/// pub fn load_config(path: Option<&Path>) -> anyhow::Result<`KimiConfig`>
 /// { returns parsed config or default if no file exists }
 pub fn load_config(path: Option<&Path>) -> anyhow::Result<KimiConfig> {
     let config_path = if let Some(p) = path {
@@ -64,7 +64,7 @@ impl KimiConfig {
 
     #[allow(dead_code)]
     /// { self.contracts.fail_on_drop is Some or None }
-    /// pub fn fail_on_drop(&self) -> Option<u32>
+    /// pub fn fail_on_drop(&self) -> `Option<u32>`
     /// { returns the configured fail-on-drop threshold }
     pub fn fail_on_drop(&self) -> Option<u32> {
         self.contracts.as_ref()?.fail_on_drop
